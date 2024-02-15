@@ -1,0 +1,29 @@
+syntax = "proto3";
+package tailsys;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "./commands/";
+
+enum OSType {
+  OS_TYPE_UNSPECIFIED = 0;
+  LINUX = 1;
+  MACOS = 2;
+  WINDOWS = 3;
+}
+
+message SysInfo {
+  string hostname = 1;
+  OSType type = 2;
+  string ip = 3;
+  google.protobuf.Timestamp lastSeen = 4;
+}
+
+message Ping {
+  google.protobuf.Timestamp ping = 1;
+}
+
+message Pong {
+  google.protobuf.Timestamp ping = 1;
+  float inboundLatency = 2;
+}
