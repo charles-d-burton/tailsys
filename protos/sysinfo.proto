@@ -19,6 +19,11 @@ message SysInfo {
   google.protobuf.Timestamp lastSeen = 4;
 }
 
+message NodeRegistration {
+  SysInfo info = 1;
+  string key = 2;
+}
+
 message Ping {
   google.protobuf.Timestamp ping = 1;
 }
