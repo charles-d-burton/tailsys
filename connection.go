@@ -11,22 +11,22 @@ import (
 )
 
 type Listener struct {
-  ClientID string
-  ClientSecret string
-  AuthKey string
-  Hostname string
-  Scopes []string
+	ClientID     string
+	ClientSecret string
+	AuthKey      string
+	Hostname     string
+	Scopes       []string
 }
 
-type Option func(l *Listener) error 
+type Option func(l *Listener) error
 
 func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Server, error) {
-  for _, opt := range opts {
-    err := opt(l)
-    if err != nil {
-      return nil, err
-    }
-  }
+	for _, opt := range opts {
+		err := opt(l)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var capabilities tailscale.KeyCapabilities
 	capabilities.Devices.Create.Reusable = true
@@ -37,80 +37,79 @@ func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 	var topts []tailscale.CreateKeyOption
 	topts = append(topts, tailscale.WithKeyExpiry(10*time.Second))
 
-  if useOauth(l.ClientID, l.ClientSecret) {
-    client, err := tailscale.NewClient(
-      "",
-      "-",
-      tailscale.WithOAuthClientCredentials(l.ClientID, l.ClientSecret, l.Scopes),
-      )
-    if err != nil {
-      return  nil, err
-    }
-    key ,err := client.CreateKey(ctx, capabilities, topts...)
-    l.AuthKey = key.Key
-  }
+	if useOauth(l.ClientID, l.ClientSecret) {
+		client, err := tailscale.NewClient(
+			"",
+			"-",
+			tailscale.WithOAuthClientCredentials(l.ClientID, l.ClientSecret, l.Scopes),
+		)
+		if err != nil {
+			return nil, err
+		}
+		key, err := client.CreateKey(ctx, capabilities, topts...)
+		l.AuthKey = key.Key
+	}
 
-  if l.AuthKey == "" {
-    return nil, errors.New("no auth key set")
-  }
+	if l.AuthKey == "" {
+		return nil, errors.New("no auth key set")
+	}
 
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+	l.Hostname = hostname + "-tailsys"
 
-  hostname, err := os.Hostname()
-  if err != nil {
-    return nil, err
-  }
-  l.Hostname = hostname + "-tailsys"
+	srv := &tsnet.Server{
+		Hostname:  l.Hostname,
+		AuthKey:   l.AuthKey,
+		Ephemeral: true,
+	}
 
-  srv := &tsnet.Server{
-    Hostname: l.Hostname,
-    AuthKey: l.AuthKey,
-    Ephemeral: true,
-  }
-
-  return srv, nil
+	return srv, nil
 }
 
-func(l *Listener) WithOauth(clientId, clientSecret string) Option {
-  return func(l *Listener) error {
-    if clientId == "" {
-      return errors.New("client id not set")
-    }
+func (l *Listener) WithOauth(clientId, clientSecret string) Option {
+	return func(l *Listener) error {
+		if clientId == "" {
+			return errors.New("client id not set")
+		}
 
-    if clientSecret == "" {
-      return errors.New("client secret not set")
-    }
-    l.ClientID = clientId
-    l.ClientSecret = clientSecret
-    return nil
-  } 
+		if clientSecret == "" {
+			return errors.New("client secret not set")
+		}
+		l.ClientID = clientId
+		l.ClientSecret = clientSecret
+		return nil
+	}
 }
 
-func(l *Listener) WithAPIKey(key string) Option {
-  return func(l *Listener) error {
-    l.AuthKey = key
-    return nil
-  }
+func (l *Listener) WithAPIKey(key string) Option {
+	return func(l *Listener) error {
+		l.AuthKey = key
+		return nil
+	}
 }
 
-func(l *Listener) WithScopes(scopes ...string) Option {
-  return func(l *Listener) error {
-    if scopes != nil {
-      l.Scopes = scopes
-    }
-    return nil
-  }
+func (l *Listener) WithScopes(scopes ...string) Option {
+	return func(l *Listener) error {
+		if scopes != nil {
+			l.Scopes = scopes
+		}
+		return nil
+	}
 }
 
 func useOauth(clientId, clientSecret string) bool {
-  if clientId == "" || clientSecret == "" {
-    return false
-  }
-  return true
+	if clientId == "" || clientSecret == "" {
+		return false
+	}
+	return true
 }
 
 func useAPIKey(key string) bool {
-  if key == "" {
-    return false
-  }
-  return true
+	if key == "" {
+		return false
+	}
+	return true
 }
