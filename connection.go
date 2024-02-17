@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
@@ -48,6 +50,9 @@ func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 			return nil, err
 		}
 		key, err := client.CreateKey(ctx, capabilities, topts...)
+		if err != nil {
+			return nil, err
+		}
 		l.AuthKey = key.Key
 	}
 
@@ -104,6 +109,12 @@ func (l *Listener) WithScopes(scopes ...string) Option {
 func (l *Listener) WithTags(tags ...string) Option {
 	return func(l *Listener) error {
 		if tags != nil {
+			for _, tag := range tags {
+				stag := strings.Split(tag, ":")
+				if len(stag) < 2 {
+					return errors.New(fmt.Sprintf("tag %s mush be in format tag:<tag>", tag))
+				}
+			}
 			l.Tags = tags
 		}
 		return nil

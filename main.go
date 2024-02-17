@@ -17,8 +17,12 @@ func main() {
 	srv, err := li.NewConnection(ctx,
 		li.WithOauth(id, secret),
 		li.WithScopes("devices", "logs:read", "routes:read"),
-		li.WithTags("tailsys"),
+		li.WithTags("tag:tailsys"),
 	)
+
+	if err != nil {
+		panic(err)
+	}
 
 	if err := srv.Start(); err != nil {
 		log.Fatalf("can't start tsnet server: %v", err)
