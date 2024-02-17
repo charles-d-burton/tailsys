@@ -16,6 +16,7 @@ type Listener struct {
 	AuthKey      string
 	Hostname     string
 	Scopes       []string
+	Tags         []string
 }
 
 type Option func(l *Listener) error
@@ -31,7 +32,7 @@ func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 	var capabilities tailscale.KeyCapabilities
 	capabilities.Devices.Create.Reusable = true
 	capabilities.Devices.Create.Ephemeral = true
-	capabilities.Devices.Create.Tags = []string{"tag:tailsys"}
+	capabilities.Devices.Create.Tags = l.Tags
 	capabilities.Devices.Create.Preauthorized = true
 
 	var topts []tailscale.CreateKeyOption
@@ -95,6 +96,15 @@ func (l *Listener) WithScopes(scopes ...string) Option {
 	return func(l *Listener) error {
 		if scopes != nil {
 			l.Scopes = scopes
+		}
+		return nil
+	}
+}
+
+func (l *Listener) WithTags(tags ...string) Option {
+	return func(l *Listener) error {
+		if tags != nil {
+			l.Tags = tags
 		}
 		return nil
 	}
