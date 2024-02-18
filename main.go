@@ -13,11 +13,11 @@ func main() {
 	secret := os.Getenv("TS_CLIENT_SECRET")
 
 	ctx := context.Background()
-	var li Listener
-	srv, err := li.NewConnection(ctx,
-		li.WithOauth(id, secret),
-		li.WithScopes("devices", "logs:read", "routes:read"),
-		li.WithTags("tag:tailsys"),
+	var tn  Tailnet
+	srv, err := tn.NewConnection(ctx,
+		tn.WithOauth(id, secret),
+		tn.WithScopes("devices", "logs:read", "routes:read"),
+		tn.WithTags("tag:tailsys"),
 	)
 
 	if err != nil {

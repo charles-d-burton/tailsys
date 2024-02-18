@@ -12,7 +12,7 @@ import (
 	"tailscale.com/tsnet"
 )
 
-type Listener struct {
+type Tailnet struct {
 	ClientID     string
 	ClientSecret string
 	AuthKey      string
@@ -21,11 +21,11 @@ type Listener struct {
 	Tags         []string
 }
 
-type Option func(l *Listener) error
+type Option func(tn *Tailnet) error
 
-func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Server, error) {
+func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Server, error) {
 	for _, opt := range opts {
-		err := opt(l)
+		err := opt(tn)
 		if err != nil {
 			return nil, err
 		}
@@ -34,17 +34,17 @@ func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 	var capabilities tailscale.KeyCapabilities
 	capabilities.Devices.Create.Reusable = true
 	capabilities.Devices.Create.Ephemeral = true
-	capabilities.Devices.Create.Tags = l.Tags
+	capabilities.Devices.Create.Tags = tn.Tags
 	capabilities.Devices.Create.Preauthorized = true
 
 	var topts []tailscale.CreateKeyOption
 	topts = append(topts, tailscale.WithKeyExpiry(10*time.Second))
 
-	if useOauth(l.ClientID, l.ClientSecret) {
+	if useOauth(tn.ClientID, tn.ClientSecret) {
 		client, err := tailscale.NewClient(
 			"",
 			"-",
-			tailscale.WithOAuthClientCredentials(l.ClientID, l.ClientSecret, l.Scopes),
+			tailscale.WithOAuthClientCredentials(tn.ClientID, tn.ClientSecret, tn.Scopes),
 		)
 		if err != nil {
 			return nil, err
@@ -53,10 +53,10 @@ func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 		if err != nil {
 			return nil, err
 		}
-		l.AuthKey = key.Key
+		tn.AuthKey = key.Key
 	}
 
-	if l.AuthKey == "" {
+	if tn.AuthKey == "" {
 		return nil, errors.New("no auth key set")
 	}
 
@@ -64,19 +64,19 @@ func (l *Listener) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 	if err != nil {
 		return nil, err
 	}
-	l.Hostname = hostname + "-tailsys"
+	tn.Hostname = hostname + "-tailsys"
 
 	srv := &tsnet.Server{
-		Hostname:  l.Hostname,
-		AuthKey:   l.AuthKey,
+		Hostname:  tn.Hostname,
+		AuthKey:   tn.AuthKey,
 		Ephemeral: true,
 	}
 
 	return srv, nil
 }
 
-func (l *Listener) WithOauth(clientId, clientSecret string) Option {
-	return func(l *Listener) error {
+func (tn *Tailnet) WithOauth(clientId, clientSecret string) Option {
+	return func(tn *Tailnet) error {
 		if clientId == "" {
 			return errors.New("client id not set")
 		}
@@ -84,30 +84,30 @@ func (l *Listener) WithOauth(clientId, clientSecret string) Option {
 		if clientSecret == "" {
 			return errors.New("client secret not set")
 		}
-		l.ClientID = clientId
-		l.ClientSecret = clientSecret
+		tn.ClientID = clientId
+		tn.ClientSecret = clientSecret
 		return nil
 	}
 }
 
-func (l *Listener) WithAPIKey(key string) Option {
-	return func(l *Listener) error {
-		l.AuthKey = key
+func (tn *Tailnet) WithAPIKey(key string) Option {
+	return func(tn *Tailnet) error {
+		tn.AuthKey = key
 		return nil
 	}
 }
 
-func (l *Listener) WithScopes(scopes ...string) Option {
-	return func(l *Listener) error {
+func (tn *Tailnet) WithScopes(scopes ...string) Option {
+	return func(tn *Tailnet) error {
 		if scopes != nil {
-			l.Scopes = scopes
+			tn.Scopes = scopes
 		}
 		return nil
 	}
 }
 
-func (l *Listener) WithTags(tags ...string) Option {
-	return func(l *Listener) error {
+func (tn *Tailnet) WithTags(tags ...string) Option {
+	return func(tn *Tailnet) error {
 		if tags != nil {
 			for _, tag := range tags {
 				stag := strings.Split(tag, ":")
@@ -115,7 +115,7 @@ func (l *Listener) WithTags(tags ...string) Option {
 					return errors.New(fmt.Sprintf("tag %s mush be in format tag:<tag>", tag))
 				}
 			}
-			l.Tags = tags
+			tn.Tags = tags
 		}
 		return nil
 	}
