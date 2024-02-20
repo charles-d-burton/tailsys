@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -12,6 +13,9 @@ func startCLI(ctx context.Context) error {
   app := &cli.App {
     Description: "A systems management application that rides the tailscale network",
     Flags: globalFlags(),
+    Before: func(ctx *cli.Context) error {
+      return nil
+    },
     Commands: []*cli.Command {
       serverCommand(),
       clientCommand(),
@@ -52,8 +56,12 @@ func serverCommand() *cli.Command {
     Name: "server",
     Aliases: []string{"s"},
     Usage: "Start the application in server mode",
-    Action: func(*cli.Context) error {
+    Action: func(ctx *cli.Context) error {
       fmt.Println("starting the server code")
+      if ctx.NArg() == 0 {
+        return errors.New("no tailcale auth supplied..")
+      }
+
       return nil
     },
   }
