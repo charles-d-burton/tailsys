@@ -2,38 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
+  "log"
 )
 
 func main() {
-	id := os.Getenv("TS_CLIENT_ID")
-	secret := os.Getenv("TS_CLIENT_SECRET")
-
-	ctx := context.Background()
-	var tn  Tailnet
-	srv, err := tn.NewConnection(ctx,
-		tn.WithOauth(id, secret),
-		tn.WithScopes("devices", "logs:read", "routes:read"),
-		tn.WithTags("tag:tailsys"),
-	)
-
-	if err != nil {
-		panic(err)
-	}
-
-	if err := srv.Start(); err != nil {
-		log.Fatalf("can't start tsnet server: %v", err)
-	}
-
-	ln, err := srv.Listen("tcp", ":80")
-	if err != nil {
-		panic(err)
-	}
-
-	log.Fatal(http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Hi there! Welcome to the tailnet!")
-	})))
+  ctx := context.Background()
+  err := connectTailnet(ctx)
+  if err != nil {
+    log.Fatal(err)
+  }
 }
