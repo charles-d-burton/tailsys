@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/urfave/cli/v2"
 )
 
-func startCLI() error {
+func startCLI(ctx context.Context) error {
   app := &cli.App {
     Flags: []cli.Flag{
       &cli.StringFlag{
@@ -16,7 +17,7 @@ func startCLI() error {
         EnvVars: []string{"TS_CLIENT_ID", "CLIENT_ID"},
       },
       &cli.StringFlag{
-        Name: "client-id",
+        Name: "client-secret",
         Usage: "oauth clientsecret from tailscale",
         EnvVars: []string{"TS_CLIENT_SECRET", "CLIENT_SECRET"},
 

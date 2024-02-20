@@ -7,7 +7,7 @@ import (
 
 func main() {
   ctx := context.Background()
-  err := connectTailnet(ctx)
+  err := startCLI(ctx)
   if err != nil {
     log.Fatal(err)
   }

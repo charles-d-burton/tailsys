@@ -24,11 +24,15 @@ message NodeRegistration {
   string key = 2;
 }
 
-message Ping {
+message PingRequest {
   google.protobuf.Timestamp ping = 1;
 }
 
-message Pong {
+message PongResponse {
   google.protobuf.Timestamp ping = 1;
   float inboundLatency = 2;
+}
+
+service Pinger {
+  rpc Ping(PingRequest) returns (PongResponse) {}
 }
