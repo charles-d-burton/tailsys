@@ -19,16 +19,33 @@ message SysInfo {
   google.protobuf.Timestamp lastSeen = 4;
 }
 
-message NodeRegistration {
-  SysInfo info = 1;
-  string key = 2;
+message Key {
+  string key = 1;
 }
 
-message Ping {
+message NodeRegistrationRequest {
+  SysInfo info = 1;
+  Key key = 2;
+}
+
+message NodeRegistrationResponse {
+  bool accepted = 1;
+}
+
+service Registration {
+  rpc Register(NodeRegistrationRequest) returns (NodeRegistrationResponse) {}
+}
+
+message PingRequest {
   google.protobuf.Timestamp ping = 1;
 }
 
-message Pong {
+message PongResponse {
   google.protobuf.Timestamp ping = 1;
   float inboundLatency = 2;
+  Key key = 3;
+}
+
+service Pinger {
+  rpc Ping(PingRequest) returns (PongResponse) {}
 }
