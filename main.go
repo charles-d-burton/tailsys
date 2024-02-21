@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-  "log"
+	"log"
 )
 
 func main() {
-  ctx := context.Background()
-  err := startCLI(ctx)
-  if err != nil {
-    log.Fatal(err)
-  }
+	ctx := context.Background()
+	err := startCLI(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

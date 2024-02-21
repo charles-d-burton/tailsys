@@ -12,7 +12,7 @@ import (
 	"tailscale.com/tsnet"
 )
 
-//Tailnet main struct to hold connection to the tailnet information
+// Tailnet main struct to hold connection to the tailnet information
 type Tailnet struct {
 	ClientID     string
 	ClientSecret string
@@ -20,13 +20,13 @@ type Tailnet struct {
 	Hostname     string
 	Scopes       []string
 	Tags         []string
-  Client *tailscale.Client
+	Client       *tailscale.Client
 }
 
-//Option function to set different options on the tailnet config
+// Option function to set different options on the tailnet config
 type Option func(tn *Tailnet) error
 
-//NewConnection setup a connection to the tailnet
+// NewConnection setup a connection to the tailnet
 func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Server, error) {
 	for _, opt := range opts {
 		err := opt(tn)
@@ -34,11 +34,11 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 			return nil, err
 		}
 	}
-  
-  err := tn.initClient(ctx)
-  if err != nil {
-    return nil, err
-  }
+
+	err := tn.initClient(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -79,29 +79,29 @@ func (tn *Tailnet) initClient(ctx context.Context) error {
 			return err
 		}
 		tn.AuthKey = key.Key
-    tn.Client = client
-    return nil 
-	} 
+		tn.Client = client
+		return nil
+	}
 
-  if tn.AuthKey == "" {
-      return errors.New("must set one of oauth keys or api key")
-  }
+	if tn.AuthKey == "" {
+		return errors.New("must set one of oauth keys or api key")
+	}
 
-  client, err := tailscale.NewClient(tn.AuthKey, "-")
-  if err != nil {
-    return err
-  }
-  tn.Client = client
+	client, err := tailscale.NewClient(tn.AuthKey, "-")
+	if err != nil {
+		return err
+	}
+	tn.Client = client
 
-  return nil
+	return nil
 }
 
-//GetDevices returns a list of devices that are conected to the configured tailnet
-func (tn *Tailnet) GetDevices(ctx context.Context)  ([]tailscale.Device, error) {
-  return tn.Client.Devices(ctx)
+// GetDevices returns a list of devices that are conected to the configured tailnet
+func (tn *Tailnet) GetDevices(ctx context.Context) ([]tailscale.Device, error) {
+	return tn.Client.Devices(ctx)
 }
 
-//WithOauth sets up the tailnet connection using an oauth credential
+// WithOauth sets up the tailnet connection using an oauth credential
 func (tn *Tailnet) WithOauth(clientId, clientSecret string) Option {
 	return func(tn *Tailnet) error {
 		if clientId == "" {
@@ -117,7 +117,7 @@ func (tn *Tailnet) WithOauth(clientId, clientSecret string) Option {
 	}
 }
 
-//WithAPIKey sets the Option to connect to the tailnet with a preconfigured Auth key
+// WithAPIKey sets the Option to connect to the tailnet with a preconfigured Auth key
 func (tn *Tailnet) WithAuthKey(key string) Option {
 	return func(tn *Tailnet) error {
 		tn.AuthKey = key
@@ -125,7 +125,7 @@ func (tn *Tailnet) WithAuthKey(key string) Option {
 	}
 }
 
-//WithScopes sets the Oauth scopes to configure for the connection
+// WithScopes sets the Oauth scopes to configure for the connection
 func (tn *Tailnet) WithScopes(scopes ...string) Option {
 	return func(tn *Tailnet) error {
 		if scopes != nil {
@@ -135,7 +135,7 @@ func (tn *Tailnet) WithScopes(scopes ...string) Option {
 	}
 }
 
-//WithTags sets the tags that were configured with the oauth connection
+// WithTags sets the tags that were configured with the oauth connection
 func (tn *Tailnet) WithTags(tags ...string) Option {
 	return func(tn *Tailnet) error {
 		if tags != nil {

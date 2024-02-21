@@ -19,6 +19,96 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
+	Registration_Register_FullMethodName = "/tailsys.Registration/Register"
+)
+
+// RegistrationClient is the client API for Registration service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type RegistrationClient interface {
+	Register(ctx context.Context, in *NodeRegistrationRequest, opts ...grpc.CallOption) (*NodeRegistrationResponse, error)
+}
+
+type registrationClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewRegistrationClient(cc grpc.ClientConnInterface) RegistrationClient {
+	return &registrationClient{cc}
+}
+
+func (c *registrationClient) Register(ctx context.Context, in *NodeRegistrationRequest, opts ...grpc.CallOption) (*NodeRegistrationResponse, error) {
+	out := new(NodeRegistrationResponse)
+	err := c.cc.Invoke(ctx, Registration_Register_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RegistrationServer is the server API for Registration service.
+// All implementations must embed UnimplementedRegistrationServer
+// for forward compatibility
+type RegistrationServer interface {
+	Register(context.Context, *NodeRegistrationRequest) (*NodeRegistrationResponse, error)
+	mustEmbedUnimplementedRegistrationServer()
+}
+
+// UnimplementedRegistrationServer must be embedded to have forward compatible implementations.
+type UnimplementedRegistrationServer struct {
+}
+
+func (UnimplementedRegistrationServer) Register(context.Context, *NodeRegistrationRequest) (*NodeRegistrationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
+}
+func (UnimplementedRegistrationServer) mustEmbedUnimplementedRegistrationServer() {}
+
+// UnsafeRegistrationServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to RegistrationServer will
+// result in compilation errors.
+type UnsafeRegistrationServer interface {
+	mustEmbedUnimplementedRegistrationServer()
+}
+
+func RegisterRegistrationServer(s grpc.ServiceRegistrar, srv RegistrationServer) {
+	s.RegisterService(&Registration_ServiceDesc, srv)
+}
+
+func _Registration_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NodeRegistrationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistrationServer).Register(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registration_Register_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistrationServer).Register(ctx, req.(*NodeRegistrationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Registration_ServiceDesc is the grpc.ServiceDesc for Registration service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Registration_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "tailsys.Registration",
+	HandlerType: (*RegistrationServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Register",
+			Handler:    _Registration_Register_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sysinfo.proto",
+}
+
+const (
 	Pinger_Ping_FullMethodName = "/tailsys.Pinger/Ping"
 )
 
