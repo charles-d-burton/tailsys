@@ -10,9 +10,10 @@ import (
 )
 
 const (
-  clientIdFlag    = "client-id"
+	clientIdFlag    = "client-id"
 	clienSecretFlag = "client-secret"
 	authKeyFlag     = "auth-key"
+	portFlag        = "port"
 )
 
 func startCLI(ctx context.Context) error {
@@ -65,6 +66,12 @@ func globalFlags() []cli.Flag {
 			Usage:   "pre-generated auth key from tailcale",
 			EnvVars: []string{"TS_AUTH_KEY", "AUTH_KEY"},
 		},
+		&cli.StringFlag{
+			Name:        portFlag,
+			Usage:       "port for rpc server to listen on, default 6655",
+			DefaultText: "6655",
+			EnvVars:     []string{"RPC_PORT", "PORT"},
+		},
 	}
 }
 
@@ -75,7 +82,7 @@ func serverCommand() *cli.Command {
 		Usage:   "Start the application in server mode",
 		Action: func(ctx *cli.Context) error {
 			fmt.Println("starting the server code")
-      return startGRPCConnection(ctx) 
+			return startGRPCConnection(ctx)
 		},
 	}
 }

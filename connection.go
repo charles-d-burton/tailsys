@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
+	"google.golang.org/grpc"
 	"tailscale.com/tsnet"
 )
 
@@ -21,6 +22,7 @@ type Tailnet struct {
 	Scopes       []string
 	Tags         []string
 	Client       *tailscale.Client
+  GRPCServer *grpc.Server
 }
 
 // Option function to set different options on the tailnet config
