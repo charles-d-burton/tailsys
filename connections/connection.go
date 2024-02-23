@@ -1,9 +1,10 @@
-package main
+package connections
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +12,10 @@ import (
 	"github.com/tailscale/tailscale-client-go/tailscale"
 	"google.golang.org/grpc"
 	"tailscale.com/tsnet"
+
+	pb "github.com/charles-d-burton/tailsys/commands"
+	"github.com/charles-d-burton/tailsys/services"
+	"github.com/charles-d-burton/tailsys/services/client"
 )
 
 // Tailnet main struct to hold connection to the tailnet information
@@ -24,6 +29,7 @@ type Tailnet struct {
 	Tags         []string
 	Client       *tailscale.Client
   GRPCServer *grpc.Server
+  listener net.Listener
 }
 
 // Option function to set different options on the tailnet config
@@ -152,6 +158,47 @@ func (tn *Tailnet) WithTags(tags ...string) Option {
 		}
 		return nil
 	}
+}
+
+func (tn *Tailnet) createRPCServer(ctx context.Context, srv *tsnet.Server) error {
+
+	// devices, err := tn.GetDevices(ctx)
+	// if err != nil {
+	//   return(err)
+	// }
+	// for _, device := range devices {
+	//   fmt.Println(device)
+	// }
+
+	if err := srv.Start(); err != nil {
+		return err
+	}
+
+	ln, err := srv.Listen("tcp", ":6655")
+	if err != nil {
+		return err
+	}
+  tn.Addr = ln.Addr().String()
+
+	s := grpc.NewServer()
+
+	// pb.RegisterPingerServer(s, &pingerGRPCServer{})
+	// pb.RegisterRegistrationServer(s, &registrationServer{})
+
+	// if err := s.Serve(ln); err != nil {
+	// 	return err
+	// }
+  tn.listener = ln
+  tn.GRPCServer = s
+
+	return nil
+}
+
+func (tn *Tailnet) startRPCClientMode(ctx context.Context) error {
+  pb.RegisterPingerServer(tn.GRPCServer, &services.Pinger{})
+  pb.RegisterCommandRunnerServer(tn.GRPCServer, &client.CommandServer{})
+  return tn.GRPCServer.Serve(tn.listener)
+
 }
 
 func useOauth(clientId, clientSecret string) bool {

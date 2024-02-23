@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
+  "github.com/charles-d-burton/tailsys/connections"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 	portFlag        = "port"
 )
 
-func startCLI(ctx context.Context) error {
+func StartCLI(ctx context.Context) error {
 	app := &cli.App{
 		Name:        "tailsys",
 		Description: "A systems management application that rides the tailscale network",
@@ -182,7 +183,7 @@ func startGRPCConnection(ctx *cli.Context) error {
 	id := ctx.Value(clientIdFlag).(string)
 	secret := ctx.Value(clienSecretFlag).(string)
 	if id != "" && secret != "" {
-		_, err := connectOauth(ctx.Context, id, secret)
+		_, err := connections.ConnectOauth(ctx.Context, id, secret)
 		if err != nil {
 			return err
 		}
@@ -191,7 +192,7 @@ func startGRPCConnection(ctx *cli.Context) error {
 
 	authKey := ctx.Value(authKeyFlag).(string)
 	if authKey != "" {
-		_, err := connectAuthKey(ctx.Context, authKey)
+		_, err := connections.ConnectAuthKey(ctx.Context, authKey)
 		if err != nil {
 			return nil
 		}
