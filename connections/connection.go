@@ -16,6 +16,7 @@ import (
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/services"
 	"github.com/charles-d-burton/tailsys/services/client"
+	"github.com/charles-d-burton/tailsys/services/coordination"
 )
 
 // Tailnet main struct to hold connection to the tailnet information
@@ -48,12 +49,6 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 	if err != nil {
 		return nil, err
 	}
-
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, err
-	}
-	tn.Hostname = hostname + "-tailsys"
 
 	srv := &tsnet.Server{
 		Hostname:  tn.Hostname,
@@ -160,6 +155,21 @@ func (tn *Tailnet) WithTags(tags ...string) Option {
 	}
 }
 
+func (tn *Tailnet) WithHostname(hostname string) Option {
+  return func(tn *Tailnet) error {
+    if hostname == "" {
+      hostname, err := os.Hostname()
+      if err != nil {
+        return err
+      }
+      tn.Hostname = hostname + "-tailsys"
+      return nil
+    }
+    tn.Hostname = hostname
+    return nil
+  }
+}
+
 func (tn *Tailnet) createRPCServer(ctx context.Context, srv *tsnet.Server) error {
 
 	// devices, err := tn.GetDevices(ctx)
@@ -182,24 +192,25 @@ func (tn *Tailnet) createRPCServer(ctx context.Context, srv *tsnet.Server) error
 
 	s := grpc.NewServer()
 
-	// pb.RegisterPingerServer(s, &pingerGRPCServer{})
-	// pb.RegisterRegistrationServer(s, &registrationServer{})
-
-	// if err := s.Serve(ln); err != nil {
-	// 	return err
-	// }
   tn.listener = ln
   tn.GRPCServer = s
 
 	return nil
 }
 
-func (tn *Tailnet) startRPCClientMode(ctx context.Context) error {
+func (tn *Tailnet) StartRPCClientMode(ctx context.Context) error {
   pb.RegisterPingerServer(tn.GRPCServer, &services.Pinger{})
   pb.RegisterCommandRunnerServer(tn.GRPCServer, &client.CommandServer{})
   return tn.GRPCServer.Serve(tn.listener)
 
 }
+
+func (tn *Tailnet) StartRPCCoordinationServer(ctx context.Context) error {
+  pb.RegisterPingerServer(tn.GRPCServer, &services.Pinger{})
+  pb.RegisterRegistrationServer(tn.GRPCServer, &coordination.RegistrationServer{})
+  return tn.GRPCServer.Serve(tn.listener)
+}
+
 
 func useOauth(clientId, clientSecret string) bool {
 	if clientId == "" || clientSecret == "" {

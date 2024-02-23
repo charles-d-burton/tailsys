@@ -15,6 +15,7 @@ const (
 	clienSecretFlag = "client-secret"
 	authKeyFlag     = "auth-key"
 	portFlag        = "port"
+  hostnameFlag = "hostname"
 )
 
 func StartCLI(ctx context.Context) error {
@@ -37,7 +38,7 @@ func StartCLI(ctx context.Context) error {
 			return errors.New("error, must set either the oauth client/secret or pass a pre-generated auth-key")
 		},
 		Commands: []*cli.Command{
-			serverCommand(),
+	  coordinationServerCommand(),		
 			clientCommand(),
 			interactiveCommand(),
 			nonInteractiveCommand(),
@@ -51,6 +52,7 @@ func StartCLI(ctx context.Context) error {
 }
 
 func globalFlags() []cli.Flag {
+
 	return []cli.Flag{
 		&cli.StringFlag{
 			Name:    clientIdFlag,
@@ -73,17 +75,27 @@ func globalFlags() []cli.Flag {
 			DefaultText: "6655",
 			EnvVars:     []string{"RPC_PORT", "PORT"},
 		},
+    &cli.StringFlag{
+      Name: hostnameFlag,
+      Usage: "set tailnet hostname",
+      EnvVars: []string{"TS_HOSTNAME", "HOSTNAME"},
+    },
 	}
 }
 
-func serverCommand() *cli.Command {
+func coordinationServerCommand() *cli.Command {
 	return &cli.Command{
-		Name:    "server",
-		Aliases: []string{"s"},
+		Name:    "coordination-server",
+		Aliases: []string{"co"},
 		Usage:   "Start the application in server mode",
 		Action: func(ctx *cli.Context) error {
 			fmt.Println("starting the server code")
-			return startGRPCConnection(ctx)
+      tn, err := startGRPCConnection(ctx)
+      if err != nil {
+        return err
+      }
+      tn.StartRPCCoordinationServer(ctx.Context)
+      return nil
 		},
     Flags: []cli.Flag{
       &cli.BoolFlag{
@@ -102,8 +114,13 @@ func clientCommand() *cli.Command {
 		Name:    "client",
 		Aliases: []string{"c"},
 		Usage:   "Start the application in client mode",
-		Action: func(*cli.Context) error {
+		Action: func(ctx *cli.Context) error {
 			fmt.Println("starting the client code")
+      tn, err := startGRPCConnection(ctx)
+      if err != nil {
+        return err
+      }
+      tn.StartRPCClientMode(ctx.Context)
 			return nil
 		},
     Flags: []cli.Flag{
@@ -179,24 +196,24 @@ func nonInteractiveCommand() *cli.Command {
 	}
 }
 
-func startGRPCConnection(ctx *cli.Context) error {
+func startGRPCConnection(ctx *cli.Context) (*connections.Tailnet, error) {
 	id := ctx.Value(clientIdFlag).(string)
 	secret := ctx.Value(clienSecretFlag).(string)
 	if id != "" && secret != "" {
-		_, err := connections.ConnectOauth(ctx.Context, id, secret)
+		tn, err := connections.ConnectOauth(ctx.Context, id, secret)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return nil
+		return tn, nil
 	}
 
 	authKey := ctx.Value(authKeyFlag).(string)
 	if authKey != "" {
-		_, err := connections.ConnectAuthKey(ctx.Context, authKey)
+		tn, err := connections.ConnectAuthKey(ctx.Context, authKey)
 		if err != nil {
-			return nil
+			return nil, err
 		}
-		return nil
+		return tn, nil 
 	}
-	return nil
+	return nil, errors.New("unable to start, no auth provided")
 }
