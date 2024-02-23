@@ -1,0 +1,22 @@
+syntax = "proto3";
+package tailsys;
+option go_package = "./commands";
+
+import "google/protobuf/timestamp.proto";
+import "sysinfo.proto";
+
+message CommandRequest {
+  google.protobuf.Timestamp requested = 1;
+  string command = 2;
+  Key key = 3;
+}
+
+message CommandResonse {
+  google.protobuf.Timestamp ran = 1;
+  bool successful = 2;
+  bytes output = 3;
+}
+
+service CommandRunner {
+  rpc Command(CommandRequest) returns (CommandResonse) {} 
+}

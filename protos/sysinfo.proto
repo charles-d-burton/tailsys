@@ -1,9 +1,8 @@
 syntax = "proto3";
 package tailsys;
+option go_package = "./commands";
 
 import "google/protobuf/timestamp.proto";
-
-option go_package = "./commands/";
 
 enum OSType {
   OS_TYPE_UNSPECIFIED = 0;
@@ -30,6 +29,7 @@ message NodeRegistrationRequest {
 
 message NodeRegistrationResponse {
   bool accepted = 1;
+  Key key = 2;
 }
 
 service Registration {
@@ -41,7 +41,7 @@ message PingRequest {
 }
 
 message PongResponse {
-  google.protobuf.Timestamp ping = 1;
+  google.protobuf.Timestamp ping = 1; 
   float inboundLatency = 2;
   Key key = 3;
 }
@@ -49,3 +49,4 @@ message PongResponse {
 service Pinger {
   rpc Ping(PingRequest) returns (PongResponse) {}
 }
+

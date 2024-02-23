@@ -84,6 +84,15 @@ func serverCommand() *cli.Command {
 			fmt.Println("starting the server code")
 			return startGRPCConnection(ctx)
 		},
+    Flags: []cli.Flag{
+      &cli.BoolFlag{
+        Name: "dev",
+        Usage: "set true to start server in dev mode, will accept all client connections",
+        DefaultText: "false",
+        EnvVars: []string{"DEV_MODE"},
+      },
+
+    },
 	}
 }
 
@@ -96,6 +105,19 @@ func clientCommand() *cli.Command {
 			fmt.Println("starting the client code")
 			return nil
 		},
+    Flags: []cli.Flag{
+      &cli.StringFlag{
+        Name: "tags",
+        Usage: "tags for discovering coordination server on tailscale",
+      },
+      &cli.StringFlag{
+        Name: "coordination-server",
+        Aliases: []string{"cs"},
+        Usage: "tags for discovering coordination server on tailscale",
+        EnvVars: []string{"COORDINATION_SERVER"},
+      },
+
+    },
 	}
 }
 

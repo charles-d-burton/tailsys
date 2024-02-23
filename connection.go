@@ -19,6 +19,7 @@ type Tailnet struct {
 	ClientSecret string
 	AuthKey      string
 	Hostname     string
+  Addr string
 	Scopes       []string
 	Tags         []string
 	Client       *tailscale.Client
