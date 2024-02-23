@@ -201,7 +201,7 @@ func startGRPCConnection(ctx *cli.Context) (*connections.Tailnet, error) {
 	secret := ctx.Value(clienSecretFlag).(string)
   hostname := ctx.Value(hostnameFlag).(string)
 	if id != "" && secret != "" {
-		tn, err := connections.ConnectOauth(ctx, id, secret, hostname)
+		tn, err := connections.ConnectOauth(ctx, id, secret,hostname)
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +210,7 @@ func startGRPCConnection(ctx *cli.Context) (*connections.Tailnet, error) {
 
 	authKey := ctx.Value(authKeyFlag).(string)
 	if authKey != "" {
-		tn, err := connections.ConnectAuthKey(ctx, authKey, hostname)
+		tn, err := connections.ConnectAuthKey(ctx.Context, authKey)
 		if err != nil {
 			return nil, err
 		}

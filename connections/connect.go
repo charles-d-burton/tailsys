@@ -1,23 +1,23 @@
 package connections
 
 import (
-	"context"
-
+	"github.com/urfave/cli/v2"
 )
 
 //connect to the tailnet using oauth credentials
-func ConnectOauth(ctx context.Context, id, secret string) (*Tailnet, error) {
+func ConnectOauth(ctx *cli.Context, id, secret, hostname string) (*Tailnet, error) {
 	var tn Tailnet
-	srv, err := tn.NewConnection(ctx,
+	srv, err := tn.NewConnection(ctx.Context,
 		tn.WithOauth(id, secret),
 		tn.WithScopes("devices", "logs:read", "routes:read"),
 		tn.WithTags("tag:tailsys"),
+    tn.WithHostname(hostname),
 	)
 
 	if err != nil {
 		return nil, err
 	}
-  err = tn.createRPCServer(ctx, srv)
+  err = tn.createRPCServer(ctx.Context, srv)
   if err != nil {
     return nil, err
   }
@@ -26,25 +26,25 @@ func ConnectOauth(ctx context.Context, id, secret string) (*Tailnet, error) {
 }
 
 //connect to the tailnet using a pre-generated auth-key
-func ConnectAuthKey(ctx context.Context, authKey string) (*Tailnet, error) {
+func ConnectAuthKey(ctx *cli.Context, authKey, hostname string) (*Tailnet, error) {
 	var tn Tailnet
-	srv, err := tn.NewConnection(ctx,
+	srv, err := tn.NewConnection(ctx.Context,
 		tn.WithAuthKey(authKey),
 
     //TODO: This needs to be parameterized in the config
 		tn.WithScopes("devices", "logs:read", "routes:read"),
 		tn.WithTags("tag:tailsys"),
+    tn.WithHostname(hostname),
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-  err = tn.createRPCServer(ctx, srv)
+  err = tn.createRPCServer(ctx.Context, srv)
   if err != nil {
     return nil, err
   }
 	return &tn, nil
 }
-
 
