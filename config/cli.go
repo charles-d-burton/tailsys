@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,7 +17,7 @@ const (
   hostnameFlag = "hostname"
 )
 
-func StartCLI(ctx context.Context) error {
+func StartCLI() error {
 	app := &cli.App{
 		Name:        "tailsys",
 		Description: "A systems management application that rides the tailscale network",
