@@ -1,12 +1,13 @@
-package config
+package cmd
 
 import (
 	"errors"
 	"fmt"
 	"os"
+  "time"
 
+	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/urfave/cli/v2"
-  "github.com/charles-d-burton/tailsys/connections"
 )
 
 const (
@@ -119,8 +120,24 @@ func clientCommand() *cli.Command {
       if err != nil {
         return err
       }
-      tn.StartRPCClientMode(ctx.Context)
-			return nil
+      fmt.Println("registering with coordination server")
+      coServer := ctx.Value("coordination-server").(string)
+
+      //Retry 5 times
+      for i := 0; i < 5; i++ {
+        err = tn.RegisterWithCoordinationServer(ctx.Context, coServer)
+        if err != nil {
+          time.Sleep(3 * time.Second)
+          continue
+        }
+        break
+      }
+      if err != nil {
+        return err
+      }
+
+      return tn.StartRPCClientMode(ctx.Context)
+			
 		},
     Flags: []cli.Flag{
       &cli.StringFlag{
@@ -131,9 +148,8 @@ func clientCommand() *cli.Command {
         Name: "coordination-server",
         Aliases: []string{"cs"},
         Usage: "tags for discovering coordination server on tailscale",
-        EnvVars: []string{"COORDINATION_SERVER"},
+        EnvVars: []string{"COORDINATION_SERVER", "C_SERVER"},
       },
-
     },
 	}
 }

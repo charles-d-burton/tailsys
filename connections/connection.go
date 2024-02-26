@@ -11,6 +11,8 @@ import (
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"tailscale.com/tsnet"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
@@ -84,6 +86,7 @@ func (tn *Tailnet) initClient(ctx context.Context) error {
 		}
 		tn.AuthKey = key.Key
 		tn.Client = client
+    tn.reapDeviceID(ctx)
 		return nil
 	}
 
@@ -96,10 +99,31 @@ func (tn *Tailnet) initClient(ctx context.Context) error {
 		return err
 	}
 	tn.Client = client
+  tn.reapDeviceID(ctx)
+
 
 	return nil
 }
 
+func (tn *Tailnet) reapDeviceID(ctx context.Context) error {
+  devices, err := tn.Client.Devices(ctx)
+  fmt.Printf("FOUND %d DEVICES\n",len(devices))
+  if err != nil {
+    return err
+  }
+  for _, device := range devices {
+    fmt.Println(device.Hostname)
+    if device.Hostname == tn.Hostname {
+      fmt.Printf("found device %s with same name %s\n\n", device.Hostname, tn.Hostname)
+      err := tn.Client.DeleteDevice(ctx, device.ID)
+      if err != nil {
+        return err
+      }
+      break
+    }
+  }
+  return nil
+}
 // GetDevices returns a list of devices that are conected to the configured tailnet
 func (tn *Tailnet) GetDevices(ctx context.Context) ([]tailscale.Device, error) {
 	return tn.Client.Devices(ctx)
@@ -209,6 +233,34 @@ func (tn *Tailnet) StartRPCCoordinationServer(ctx context.Context) error {
   pb.RegisterPingerServer(tn.GRPCServer, &services.Pinger{})
   pb.RegisterRegistrationServer(tn.GRPCServer, &coordination.RegistrationServer{})
   return tn.GRPCServer.Serve(tn.listener)
+}
+
+func (tn *Tailnet) RegisterWithCoordinationServer(ctx context.Context, addr string) error {
+  conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+  if err != nil {
+    return err
+  }
+  defer conn.Close()
+  c := pb.NewRegistrationClient(conn)
+
+  r, err := c.Register(ctx, &pb.NodeRegistrationRequest{
+    Info: &pb.SysInfo{
+      Hostname: tn.Hostname,
+      Type: pb.OSType_LINUX,
+      Ip: tn.Addr,
+      LastSeen: timestamppb.Now(),
+    },
+    Key: &pb.Key{Key: "randomstring"},
+    SystemType: pb.SystemType_CLIENT,
+  })
+
+  if err != nil {
+    return err
+  }
+  
+  fmt.Println(r)
+
+  return nil
 }
 
 

@@ -2,6 +2,7 @@ package coordination
 
 import (
 	"context"
+	"fmt"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
 )
@@ -12,8 +13,12 @@ type RegistrationServer struct {
 }
 
 //RegisterNode send the key to the server to register a node
-func (p *RegistrationServer) RegisterNode(ctx context.Context, in *pb.NodeRegistrationRequest) (*pb.NodeRegistrationResponse, error) {
+func (p *RegistrationServer) Register(ctx context.Context, in *pb.NodeRegistrationRequest) (*pb.NodeRegistrationResponse, error) {
+  fmt.Println("received coordination request")
+  fmt.Println(in)
 	return &pb.NodeRegistrationResponse{
-  
+    Accepted: true,  
+    Key: &pb.Key{Key: "coordination-server-key"},
   }, nil
 }
+

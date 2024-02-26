@@ -11,6 +11,12 @@ enum OSType {
   WINDOWS = 3;
 }
 
+enum SystemType {
+  COORDINATION_SERVER = 0;
+  CLIENT = 1;
+  CLI = 2;
+}
+
 message SysInfo {
   string hostname = 1;
   OSType type = 2;
@@ -25,6 +31,7 @@ message Key {
 message NodeRegistrationRequest {
   SysInfo info = 1;
   Key key = 2;
+  SystemType systemType = 3;
 }
 
 message NodeRegistrationResponse {

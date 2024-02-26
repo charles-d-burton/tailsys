@@ -2,11 +2,11 @@ package main
 
 import (
 	"log"
-  "github.com/charles-d-burton/tailsys/config"
+  "github.com/charles-d-burton/tailsys/cmd"
 )
 
 func main() {
-	err := config.StartCLI()
+	err := cmd.StartCLI()
 	if err != nil {
 		log.Fatal(err)
 	}
