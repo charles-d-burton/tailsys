@@ -26,6 +26,7 @@ type Tailnet struct {
 	Client       *tailscale.Client
 	GRPCServer   *grpc.Server
 	Listener     net.Listener
+  TailnetLogging bool
 }
 
 // Option function to set different options on the tailnet config
@@ -49,6 +50,8 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 		Hostname:  tn.Hostname,
 		AuthKey:   tn.AuthKey,
 		Ephemeral: true,
+    //TODO: this is erroring, I think it's a bug on the tailscale side
+//    Logger: func(string, ...any) {},
 	}
 
 	return srv, nil
@@ -185,6 +188,13 @@ func (tn *Tailnet) WithHostname(hostname string) Option {
 		tn.Hostname = hostname
 		return nil
 	}
+}
+
+func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
+  return func(tn *Tailnet) error {
+    tn.TailnetLogging = enabled
+    return nil
+  }
 }
 
 func (tn *Tailnet) createRPCServer(srv *tsnet.Server) error {

@@ -82,7 +82,6 @@ import (
 	"tailscale.com/types/preftype"
 	"tailscale.com/types/ptr"
 	"tailscale.com/types/views"
-	"tailscale.com/util/cmpx"
 	"tailscale.com/util/deephash"
 	"tailscale.com/util/dnsname"
 	"tailscale.com/util/mak"
@@ -242,8 +241,9 @@ type LocalBackend struct {
 	endpoints        []tailcfg.Endpoint
 	blocked          bool
 	keyExpired       bool
-	authURL          string // cleared on Notify
-	authURLSticky    string // not cleared on Notify
+	authURL          string    // cleared on Notify
+	authURLSticky    string    // not cleared on Notify
+	authURLTime      time.Time // when the authURL was received from the control server
 	interact         bool
 	egg              bool
 	prevIfState      *interfaces.State
@@ -425,6 +425,17 @@ func NewLocalBackend(logf logger.Logf, logID logid.PublicID, sys *tsd.System, lo
 				// conditional to avoid log spam at start when off
 				b.SetComponentDebugLogging(component, until)
 			}
+		}
+	}
+
+	// initialize TailFS shares from saved state
+	fs, ok := b.sys.TailFSForRemote.GetOK()
+	if ok {
+		b.mu.Lock()
+		shares, err := b.tailFSGetSharesLocked()
+		b.mu.Unlock()
+		if err == nil && len(shares) > 0 {
+			fs.SetShares(shares)
 		}
 	}
 
@@ -915,6 +926,7 @@ func (b *LocalBackend) WhoIs(ipp netip.AddrPort) (n tailcfg.NodeView, u tailcfg.
 	var zero tailcfg.NodeView
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	nid, ok := b.nodeByAddr[ipp.Addr()]
 	if !ok {
 		var ip netip.Addr
@@ -1097,6 +1109,7 @@ func (b *LocalBackend) SetControlClientStatus(c controlclient.Client, st control
 	if st.URL != "" {
 		b.authURL = st.URL
 		b.authURLSticky = st.URL
+		b.authURLTime = b.clock.Now()
 	}
 	if (wasBlocked || b.seamlessRenewalEnabled()) && st.LoginFinished() {
 		// Interactive login finished successfully (URL visited).
@@ -2253,7 +2266,7 @@ func (b *LocalBackend) WatchNotifications(ctx context.Context, mask ipn.NotifyWa
 	b.mu.Lock()
 	b.activeWatchSessions.Add(sessionID)
 
-	const initialBits = ipn.NotifyInitialState | ipn.NotifyInitialPrefs | ipn.NotifyInitialNetMap
+	const initialBits = ipn.NotifyInitialState | ipn.NotifyInitialPrefs | ipn.NotifyInitialNetMap | ipn.NotifyInitialTailFSShares
 	if mask&initialBits != 0 {
 		ini = &ipn.Notify{Version: version.Long()}
 		if mask&ipn.NotifyInitialState != 0 {
@@ -2268,6 +2281,17 @@ func (b *LocalBackend) WatchNotifications(ctx context.Context, mask ipn.NotifyWa
 		}
 		if mask&ipn.NotifyInitialNetMap != 0 {
 			ini.NetMap = b.netMap
+		}
+		if mask&ipn.NotifyInitialTailFSShares != 0 && b.tailFSSharingEnabledLocked() {
+			shares, err := b.tailFSGetSharesLocked()
+			if err != nil {
+				b.logf("unable to notify initial tailfs shares: %v", err)
+			} else {
+				ini.TailFSShares = make(map[string]string, len(shares))
+				for _, share := range shares {
+					ini.TailFSShares[share.Name] = share.Path
+				}
+			}
 		}
 	}
 
@@ -2785,11 +2809,15 @@ func (b *LocalBackend) StartLoginInteractive() {
 	b.assertClientLocked()
 	b.interact = true
 	url := b.authURL
+	timeSinceAuthURLCreated := b.clock.Since(b.authURLTime)
 	cc := b.cc
 	b.mu.Unlock()
 	b.logf("StartLoginInteractive: url=%v", url != "")
 
-	if url != "" {
+	// Only use an authURL if it was sent down from control in the last
+	// 6 days and 23 hours. Avoids using a stale URL that is no longer valid
+	// server-side. Server-side URLs expire after 7 days.
+	if url != "" && timeSinceAuthURLCreated < ((7*24*time.Hour)-(1*time.Hour)) {
 		b.popBrowserAuthNow()
 	} else {
 		cc.Login(nil, b.loginFlags|controlclient.LoginInteractive)
@@ -3194,7 +3222,7 @@ func (b *LocalBackend) setPrefsLockedOnEntry(caller string, newp *ipn.Prefs) ipn
 			if !oldp.Persist().Valid() {
 				b.logf("active login: %s", newLoginName)
 			} else {
-				oldLoginName := oldp.Persist().UserProfile().LoginName()
+				oldLoginName := oldp.Persist().UserProfile().LoginName
 				if oldLoginName != newLoginName {
 					b.logf("active login: %q (changed from %q)", newLoginName, oldLoginName)
 				}
@@ -3283,13 +3311,24 @@ var (
 // TCPHandlerForDst returns a TCP handler for connections to dst, or nil if
 // no handler is needed. It also returns a list of TCP socket options to
 // apply to the socket before calling the handler.
+// TCPHandlerForDst is called both for connections to our node's local IP
+// as well as to the service IP (quad 100).
 func (b *LocalBackend) TCPHandlerForDst(src, dst netip.AddrPort) (handler func(c net.Conn) error, opts []tcpip.SettableSocketOption) {
-	if dst.Port() == 80 && (dst.Addr() == magicDNSIP || dst.Addr() == magicDNSIPv6) {
-		if b.ShouldRunWebClient() {
-			return b.handleWebClientConn, opts
+	// First handle internal connections to the service IP
+	hittingServiceIP := dst.Addr() == magicDNSIP || dst.Addr() == magicDNSIPv6
+	if hittingServiceIP {
+		switch dst.Port() {
+		case 80:
+			if b.ShouldRunWebClient() {
+				return b.handleWebClientConn, opts
+			}
+			return b.HandleQuad100Port80Conn, opts
+		case TailFSLocalPort:
+			return b.handleTailFSConn, opts
 		}
-		return b.HandleQuad100Port80Conn, opts
 	}
+
+	// Then handle external connections to the local IP.
 	if !b.isLocalIP(dst.Addr()) {
 		return nil, nil
 	}
@@ -3317,6 +3356,15 @@ func (b *LocalBackend) TCPHandlerForDst(src, dst netip.AddrPort) (handler func(c
 		return handler, opts
 	}
 	return nil, nil
+}
+
+func (b *LocalBackend) handleTailFSConn(conn net.Conn) error {
+	fs, ok := b.sys.TailFSForLocal.GetOK()
+	if !ok || !b.TailFSAccessEnabled() {
+		conn.Close()
+		return nil
+	}
+	return fs.HandleConn(conn, conn.RemoteAddr())
 }
 
 func (b *LocalBackend) peerAPIServicesLocked() (ret []tailcfg.Service) {
@@ -4125,7 +4173,11 @@ func (b *LocalBackend) applyPrefsToHostinfoLocked(hi *tailcfg.Hostinfo, prefs ip
 		// TODO(bradfitz): this is called with b.mu held. Not ideal.
 		// If the filesystem gets wedged or something we could block for
 		// a long time. But probably fine.
-		sshHostKeys = b.getSSHHostKeyPublicStrings()
+		var err error
+		sshHostKeys, err = b.getSSHHostKeyPublicStrings()
+		if err != nil {
+			b.logf("warning: unable to get SSH host keys, SSH will appear as disabled for this node: %v", err)
+		}
 	}
 	hi.SSH_HostKeys = sshHostKeys
 
@@ -4163,6 +4215,7 @@ func (b *LocalBackend) enterStateLockedOnEntry(newState ipn.State) {
 	if newState == ipn.Running {
 		b.authURL = ""
 		b.authURLSticky = ""
+		b.authURLTime = time.Time{}
 	} else if oldState == ipn.Running {
 		// Transitioning away from running.
 		b.closePeerAPIListenersLocked()
@@ -4405,6 +4458,7 @@ func (b *LocalBackend) ResetForClientDisconnect() {
 	b.keyExpired = false
 	b.authURL = ""
 	b.authURLSticky = ""
+	b.authURLTime = time.Time{}
 	b.activeLogin = ""
 	b.setAtomicValuesFromPrefsLocked(ipn.PrefsView{})
 	b.enterStateLockedOnEntry(ipn.Stopped)
@@ -4523,7 +4577,7 @@ func (b *LocalBackend) setNetMapLocked(nm *netmap.NetworkMap) {
 	}
 	var login string
 	if nm != nil {
-		login = cmpx.Or(nm.UserProfiles[nm.User()].LoginName, "<missing-profile>")
+		login = cmp.Or(nm.UserProfiles[nm.User()].LoginName, "<missing-profile>")
 	}
 	b.netMap = nm
 	b.updatePeersFromNetmapLocked(nm)
@@ -4556,6 +4610,7 @@ func (b *LocalBackend) setNetMapLocked(nm *netmap.NetworkMap) {
 	}
 
 	b.MagicConn().SetSilentDisco(b.ControlKnobs().SilentDisco.Load())
+	b.MagicConn().SetProbeUDPLifetime(b.ControlKnobs().ProbeUDPLifetime.Load())
 
 	b.setDebugLogsByCapabilityLocked(nm)
 
@@ -4596,6 +4651,11 @@ func (b *LocalBackend) setNetMapLocked(nm *netmap.NetworkMap) {
 			delete(b.nodeByAddr, k)
 		}
 	}
+
+	if b.tailFSSharingEnabledLocked() {
+		b.updateTailFSPeersLocked(nm)
+		b.tailFSNotifyCurrentSharesLocked()
+	}
 }
 
 func (b *LocalBackend) updatePeersFromNetmapLocked(nm *netmap.NetworkMap) {
@@ -4603,20 +4663,45 @@ func (b *LocalBackend) updatePeersFromNetmapLocked(nm *netmap.NetworkMap) {
 		b.peers = nil
 		return
 	}
+
 	// First pass, mark everything unwanted.
 	for k := range b.peers {
 		b.peers[k] = tailcfg.NodeView{}
 	}
+
 	// Second pass, add everything wanted.
 	for _, p := range nm.Peers {
 		mak.Set(&b.peers, p.ID(), p)
 	}
+
 	// Third pass, remove deleted things.
 	for k, v := range b.peers {
 		if !v.Valid() {
 			delete(b.peers, k)
 		}
 	}
+}
+
+// tailFSTransport is an http.RoundTripper that uses the latest value of
+// b.Dialer().PeerAPITransport() for each round trip and imposes a short
+// dial timeout to avoid hanging on connecting to offline/unreachable hosts.
+type tailFSTransport struct {
+	b *LocalBackend
+}
+
+func (t *tailFSTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// dialTimeout is fairly aggressive to avoid hangs on contacting offline or
+	// unreachable hosts.
+	dialTimeout := 1 * time.Second // TODO(oxtoacart): tune this
+
+	tr := t.b.Dialer().PeerAPITransport().Clone()
+	dialContext := tr.DialContext
+	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, dialTimeout)
+		defer cancel()
+		return dialContext(ctxWithTimeout, network, addr)
+	}
+	return tr.RoundTrip(req)
 }
 
 // setDebugLogsByCapabilityLocked sets debug logging based on the self node's
@@ -5803,7 +5888,7 @@ func (b *LocalBackend) AdvertiseRoute(ipps ...netip.Prefix) error {
 		}
 
 		// If the new prefix is already contained by existing routes, skip it.
-		if coveredRouteRange(finalRoutes, ipp) {
+		if coveredRouteRangeNoDefault(finalRoutes, ipp) {
 			continue
 		}
 
@@ -5824,10 +5909,13 @@ func (b *LocalBackend) AdvertiseRoute(ipps ...netip.Prefix) error {
 	return err
 }
 
-// coveredRouteRange checks if a route is already included in a slice of
-// prefixes.
-func coveredRouteRange(finalRoutes []netip.Prefix, ipp netip.Prefix) bool {
+// coveredRouteRangeNoDefault checks if a route is already included in a slice of
+// prefixes, ignoring default routes in the range.
+func coveredRouteRangeNoDefault(finalRoutes []netip.Prefix, ipp netip.Prefix) bool {
 	for _, r := range finalRoutes {
+		if r == tsaddr.AllIPv4() || r == tsaddr.AllIPv6() {
+			continue
+		}
 		if ipp.IsSingleIP() {
 			if r.Contains(ipp.Addr()) {
 				return true
