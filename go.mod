@@ -4,13 +4,10 @@ go 1.21.7
 
 require (
 	github.com/golang/protobuf v1.5.3
-	github.com/kirsle/configdir v0.0.0-20170128060238-e45d2f54772f
 	github.com/tailscale/tailscale-client-go v1.15.0
 	github.com/urfave/cli/v2 v2.27.1
-	golang.org/x/net v0.21.0
 	google.golang.org/grpc v1.61.1
 	google.golang.org/protobuf v1.32.0
-	gopkg.in/ini.v1 v1.67.0
 	tailscale.com v1.58.2
 )
 
@@ -83,6 +80,7 @@ require (
 	golang.org/x/crypto v0.19.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/mod v0.14.0 // indirect
+	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/oauth2 v0.17.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect

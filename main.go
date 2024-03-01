@@ -1,8 +1,8 @@
 package main
 
 import (
+	"github.com/charles-d-burton/tailsys/cmd"
 	"log"
-  "github.com/charles-d-burton/tailsys/cmd"
 )
 
 func main() {

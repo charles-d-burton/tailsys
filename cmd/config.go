@@ -37,7 +37,7 @@ package cmd
 
 //   //Config file exists?
 //   if _, err = os.Stat(configFile); os.IsNotExist(err) {
-//     _, err := os.Create(configFile) 
+//     _, err := os.Create(configFile)
 //     if err != nil {
 //       return err
 //     }

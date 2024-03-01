@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-  "time"
+	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -12,7 +12,7 @@ type Pinger struct {
 	pb.UnimplementedPingerServer
 }
 
-//Ping GRPC service for the service to ping clients and provide response time
+// Ping GRPC service for the service to ping clients and provide response time
 func (p *Pinger) Ping(ctx context.Context, in *pb.PingRequest) (*pb.PongResponse, error) {
 	time := time.Now()
 	latency := time.Sub(in.Ping.AsTime())

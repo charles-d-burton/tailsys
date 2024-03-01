@@ -4,10 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
-  "time"
 
-	"github.com/charles-d-burton/tailsys/connections"
+	"github.com/charles-d-burton/tailsys/services/client"
+	"github.com/charles-d-burton/tailsys/services/coordination"
 	"github.com/urfave/cli/v2"
+)
+
+// Enum type for Auth Type
+type AuthType int
+
+// Enum definition for Auth Type
+const (
+	OAUTH AuthType = iota
+	AUTHKEY
 )
 
 const (
@@ -15,7 +24,7 @@ const (
 	clienSecretFlag = "client-secret"
 	authKeyFlag     = "auth-key"
 	portFlag        = "port"
-  hostnameFlag = "hostname"
+	hostnameFlag    = "hostname"
 )
 
 func StartCLI() error {
@@ -38,7 +47,7 @@ func StartCLI() error {
 			return errors.New("error, must set either the oauth client/secret or pass a pre-generated auth-key")
 		},
 		Commands: []*cli.Command{
-	  coordinationServerCommand(),		
+			coordinationServerCommand(),
 			clientCommand(),
 			interactiveCommand(),
 			nonInteractiveCommand(),
@@ -75,11 +84,11 @@ func globalFlags() []cli.Flag {
 			DefaultText: "6655",
 			EnvVars:     []string{"RPC_PORT", "PORT"},
 		},
-    &cli.StringFlag{
-      Name: hostnameFlag,
-      Usage: "set tailnet hostname",
-      EnvVars: []string{"TS_HOSTNAME", "HOSTNAME"},
-    },
+		&cli.StringFlag{
+			Name:    hostnameFlag,
+			Usage:   "set tailnet hostname",
+			EnvVars: []string{"TS_HOSTNAME", "HOSTNAME"},
+		},
 	}
 }
 
@@ -90,22 +99,36 @@ func coordinationServerCommand() *cli.Command {
 		Usage:   "Start the application in server mode",
 		Action: func(ctx *cli.Context) error {
 			fmt.Println("starting the server code")
-      tn, err := startGRPCConnection(ctx)
-      if err != nil {
-        return err
-      }
-      tn.StartRPCCoordinationServer(ctx.Context)
-      return nil
-		},
-    Flags: []cli.Flag{
-      &cli.BoolFlag{
-        Name: "dev",
-        Usage: "set true to start server in dev mode, will accept all client connections",
-        DefaultText: "false",
-        EnvVars: []string{"DEV_MODE"},
-      },
+			co, err := coordination.NewCoordinator(ctx.Context)
+			authType, err := getAuthType(ctx)
+			if err != nil {
+				return err
+			}
 
-    },
+			hostname := ctx.Value(hostnameFlag).(string)
+			switch authType {
+			case OAUTH:
+				id := ctx.Value(clientIdFlag).(string)
+				secret := ctx.Value(clienSecretFlag).(string)
+				if err := co.ConnectOauth(ctx.Context, id, secret, hostname); err != nil {
+					return err
+				}
+			case AUTHKEY:
+				authkey := ctx.Value(authKeyFlag).(string)
+				if err := co.ConnectAuthKey(ctx.Context, authkey, hostname); err != nil {
+					return err
+				}
+			}
+			return co.StartRPCCoordinationServer(ctx.Context)
+		},
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:        "dev",
+				Usage:       "set true to start server in dev mode, will accept all client connections",
+				DefaultText: "false",
+				EnvVars:     []string{"DEV_MODE"},
+			},
+		},
 	}
 }
 
@@ -116,41 +139,47 @@ func clientCommand() *cli.Command {
 		Usage:   "Start the application in client mode",
 		Action: func(ctx *cli.Context) error {
 			fmt.Println("starting the client code")
-      tn, err := startGRPCConnection(ctx)
-      if err != nil {
-        return err
-      }
-      fmt.Println("registering with coordination server")
-      coServer := ctx.Value("coordination-server").(string)
 
-      //Retry 5 times
-      for i := 0; i < 5; i++ {
-        err = tn.RegisterWithCoordinationServer(ctx.Context, coServer)
-        if err != nil {
-          time.Sleep(3 * time.Second)
-          continue
-        }
-        break
-      }
-      if err != nil {
-        return err
-      }
+			cl, err := client.NewClient(ctx.Context)
+			authType, err := getAuthType(ctx)
+			if err != nil {
+				return err
+			}
 
-      return tn.StartRPCClientMode(ctx.Context)
-			
+			hostname := ctx.Value(hostnameFlag).(string)
+			coServer := ctx.Value("coordination-server").(string)
+
+			switch authType {
+			case OAUTH:
+				id := ctx.Value(clientIdFlag).(string)
+				secret := ctx.Value(clienSecretFlag).(string)
+				if err := cl.ConnectOauth(ctx.Context, id, secret, hostname); err != nil {
+					return err
+				}
+			case AUTHKEY:
+				authkey := ctx.Value(authKeyFlag).(string)
+				if err := cl.ConnectAuthKey(ctx.Context, authkey, hostname); err != nil {
+					return err
+				}
+			}
+			if err := cl.RegisterWithCoordinationServer(ctx.Context, coServer); err != nil {
+				return err
+			}
+			return cl.StartRPCClientMode(ctx.Context)
+
 		},
-    Flags: []cli.Flag{
-      &cli.StringFlag{
-        Name: "tags",
-        Usage: "tags for discovering coordination server on tailscale",
-      },
-      &cli.StringFlag{
-        Name: "coordination-server",
-        Aliases: []string{"cs"},
-        Usage: "tags for discovering coordination server on tailscale",
-        EnvVars: []string{"COORDINATION_SERVER", "C_SERVER"},
-      },
-    },
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "tags",
+				Usage: "tags for discovering coordination server on tailscale",
+			},
+			&cli.StringFlag{
+				Name:    "coordination-server",
+				Aliases: []string{"cs"},
+				Usage:   "tags for discovering coordination server on tailscale",
+				EnvVars: []string{"COORDINATION_SERVER", "C_SERVER"},
+			},
+		},
 	}
 }
 
@@ -211,25 +240,17 @@ func nonInteractiveCommand() *cli.Command {
 	}
 }
 
-func startGRPCConnection(ctx *cli.Context) (*connections.Tailnet, error) {
+func getAuthType(ctx *cli.Context) (AuthType, error) {
 	id := ctx.Value(clientIdFlag).(string)
 	secret := ctx.Value(clienSecretFlag).(string)
-  hostname := ctx.Value(hostnameFlag).(string)
 	if id != "" && secret != "" {
-		tn, err := connections.ConnectOauth(ctx, id, secret, hostname)
-		if err != nil {
-			return nil, err
-		}
-		return tn, nil
+		return OAUTH, nil
 	}
 
 	authKey := ctx.Value(authKeyFlag).(string)
 	if authKey != "" {
-		tn, err := connections.ConnectAuthKey(ctx, authKey, hostname)
-		if err != nil {
-			return nil, err
-		}
-		return tn, nil 
+		return AUTHKEY, nil
+
 	}
-	return nil, errors.New("unable to start, no auth provided")
+	return -1, errors.New("unable to start, no auth provided")
 }

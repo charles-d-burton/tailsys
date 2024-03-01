@@ -11,14 +11,7 @@ import (
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"tailscale.com/tsnet"
-
-	pb "github.com/charles-d-burton/tailsys/commands"
-	"github.com/charles-d-burton/tailsys/services"
-	"github.com/charles-d-burton/tailsys/services/client"
-	"github.com/charles-d-burton/tailsys/services/coordination"
 )
 
 // Tailnet main struct to hold connection to the tailnet information
@@ -27,12 +20,12 @@ type Tailnet struct {
 	ClientSecret string
 	AuthKey      string
 	Hostname     string
-  Addr string
+	Addr         string
 	Scopes       []string
 	Tags         []string
 	Client       *tailscale.Client
-  GRPCServer *grpc.Server
-  listener net.Listener
+	GRPCServer   *grpc.Server
+	Listener     net.Listener
 }
 
 // Option function to set different options on the tailnet config
@@ -47,7 +40,7 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 		}
 	}
 
-	err := tn.initClient(ctx)
+	err := tn.InitClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +54,7 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 	return srv, nil
 }
 
-func (tn *Tailnet) initClient(ctx context.Context) error {
+func (tn *Tailnet) InitClient(ctx context.Context) error {
 	var capabilities tailscale.KeyCapabilities
 	capabilities.Devices.Create.Reusable = true
 	capabilities.Devices.Create.Ephemeral = true
@@ -86,7 +79,7 @@ func (tn *Tailnet) initClient(ctx context.Context) error {
 		}
 		tn.AuthKey = key.Key
 		tn.Client = client
-    tn.reapDeviceID(ctx)
+		tn.reapDeviceID(ctx)
 		return nil
 	}
 
@@ -99,31 +92,31 @@ func (tn *Tailnet) initClient(ctx context.Context) error {
 		return err
 	}
 	tn.Client = client
-  tn.reapDeviceID(ctx)
-
+	tn.reapDeviceID(ctx)
 
 	return nil
 }
 
 func (tn *Tailnet) reapDeviceID(ctx context.Context) error {
-  devices, err := tn.Client.Devices(ctx)
-  fmt.Printf("FOUND %d DEVICES\n",len(devices))
-  if err != nil {
-    return err
-  }
-  for _, device := range devices {
-    fmt.Println(device.Hostname)
-    if device.Hostname == tn.Hostname {
-      fmt.Printf("found device %s with same name %s\n\n", device.Hostname, tn.Hostname)
-      err := tn.Client.DeleteDevice(ctx, device.ID)
-      if err != nil {
-        return err
-      }
-      break
-    }
-  }
-  return nil
+	devices, err := tn.Client.Devices(ctx)
+	fmt.Printf("FOUND %d DEVICES\n", len(devices))
+	if err != nil {
+		return err
+	}
+	for _, device := range devices {
+		fmt.Println(device.Hostname)
+		if device.Hostname == tn.Hostname {
+			fmt.Printf("found device %s with same name %s\n\n", device.Hostname, tn.Hostname)
+			err := tn.Client.DeleteDevice(ctx, device.ID)
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
+	return nil
 }
+
 // GetDevices returns a list of devices that are conected to the configured tailnet
 func (tn *Tailnet) GetDevices(ctx context.Context) ([]tailscale.Device, error) {
 	return tn.Client.Devices(ctx)
@@ -180,29 +173,21 @@ func (tn *Tailnet) WithTags(tags ...string) Option {
 }
 
 func (tn *Tailnet) WithHostname(hostname string) Option {
-  return func(tn *Tailnet) error {
-    if hostname == "" {
-      hostname, err := os.Hostname()
-      if err != nil {
-        return err
-      }
-      tn.Hostname = hostname + "-tailsys"
-      return nil
-    }
-    tn.Hostname = hostname
-    return nil
-  }
+	return func(tn *Tailnet) error {
+		if hostname == "" {
+			hostname, err := os.Hostname()
+			if err != nil {
+				return err
+			}
+			tn.Hostname = hostname + "-tailsys"
+			return nil
+		}
+		tn.Hostname = hostname
+		return nil
+	}
 }
 
-func (tn *Tailnet) createRPCServer(ctx context.Context, srv *tsnet.Server) error {
-
-	// devices, err := tn.GetDevices(ctx)
-	// if err != nil {
-	//   return(err)
-	// }
-	// for _, device := range devices {
-	//   fmt.Println(device)
-	// }
+func (tn *Tailnet) createRPCServer(srv *tsnet.Server) error {
 
 	if err := srv.Start(); err != nil {
 		return err
@@ -212,57 +197,15 @@ func (tn *Tailnet) createRPCServer(ctx context.Context, srv *tsnet.Server) error
 	if err != nil {
 		return err
 	}
-  tn.Addr = ln.Addr().String()
+	tn.Addr = ln.Addr().String()
 
 	s := grpc.NewServer()
 
-  tn.listener = ln
-  tn.GRPCServer = s
+	tn.Listener = ln
+	tn.GRPCServer = s
 
 	return nil
 }
-
-func (tn *Tailnet) StartRPCClientMode(ctx context.Context) error {
-  pb.RegisterPingerServer(tn.GRPCServer, &services.Pinger{})
-  pb.RegisterCommandRunnerServer(tn.GRPCServer, &client.CommandServer{})
-  return tn.GRPCServer.Serve(tn.listener)
-
-}
-
-func (tn *Tailnet) StartRPCCoordinationServer(ctx context.Context) error {
-  pb.RegisterPingerServer(tn.GRPCServer, &services.Pinger{})
-  pb.RegisterRegistrationServer(tn.GRPCServer, &coordination.RegistrationServer{})
-  return tn.GRPCServer.Serve(tn.listener)
-}
-
-func (tn *Tailnet) RegisterWithCoordinationServer(ctx context.Context, addr string) error {
-  conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-  if err != nil {
-    return err
-  }
-  defer conn.Close()
-  c := pb.NewRegistrationClient(conn)
-
-  r, err := c.Register(ctx, &pb.NodeRegistrationRequest{
-    Info: &pb.SysInfo{
-      Hostname: tn.Hostname,
-      Type: pb.OSType_LINUX,
-      Ip: tn.Addr,
-      LastSeen: timestamppb.Now(),
-    },
-    Key: &pb.Key{Key: "randomstring"},
-    SystemType: pb.SystemType_CLIENT,
-  })
-
-  if err != nil {
-    return err
-  }
-  
-  fmt.Println(r)
-
-  return nil
-}
-
 
 func useOauth(clientId, clientSecret string) bool {
 	if clientId == "" || clientSecret == "" {
