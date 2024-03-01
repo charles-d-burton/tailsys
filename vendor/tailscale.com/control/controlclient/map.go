@@ -4,7 +4,6 @@
 package controlclient
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,6 +26,7 @@ import (
 	"tailscale.com/types/ptr"
 	"tailscale.com/types/views"
 	"tailscale.com/util/clientmetric"
+	"tailscale.com/util/cmpx"
 	"tailscale.com/util/mak"
 	"tailscale.com/wgengine/filter"
 )
@@ -130,7 +130,7 @@ func (ms *mapSession) occasionallyPrintSummary(summary string) {
 }
 
 func (ms *mapSession) clock() tstime.Clock {
-	return cmp.Or[tstime.Clock](ms.altClock, tstime.StdClock{})
+	return cmpx.Or[tstime.Clock](ms.altClock, tstime.StdClock{})
 }
 
 func (ms *mapSession) Close() {
@@ -171,7 +171,7 @@ func (ms *mapSession) HandleNonKeepAliveMapResponse(ctx context.Context, resp *t
 	}
 
 	// Call Node.InitDisplayNames on any changed nodes.
-	initDisplayNames(cmp.Or(resp.Node.View(), ms.lastNode), resp)
+	initDisplayNames(cmpx.Or(resp.Node.View(), ms.lastNode), resp)
 
 	ms.patchifyPeersChanged(resp)
 
@@ -538,7 +538,7 @@ var nodeFields = sync.OnceValue(getNodeFields)
 
 // getNodeFields returns the fails of tailcfg.Node.
 func getNodeFields() []string {
-	rt := reflect.TypeFor[tailcfg.Node]()
+	rt := reflect.TypeOf((*tailcfg.Node)(nil)).Elem()
 	ret := make([]string, rt.NumField())
 	for i := 0; i < rt.NumField(); i++ {
 		ret[i] = rt.Field(i).Name

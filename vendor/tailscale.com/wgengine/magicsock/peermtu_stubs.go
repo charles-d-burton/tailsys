@@ -5,8 +5,6 @@
 
 package magicsock
 
-import "tailscale.com/disco"
-
 func (c *Conn) DontFragSetting() (bool, error) {
 	return false, nil
 }
@@ -20,8 +18,4 @@ func (c *Conn) PeerMTUEnabled() bool {
 }
 
 func (c *Conn) UpdatePMTUD() {
-}
-
-func pmtuShouldLogDiscoTxErr(m disco.Message, err error) bool {
-	return true
 }

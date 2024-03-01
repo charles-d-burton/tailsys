@@ -331,7 +331,7 @@ func configureInterface(cfg *Config, tun *tun.NativeTun) (retErr error) {
 		}
 	}
 
-	var routes []*routeData
+	var routes []*winipcfg.RouteData
 	foundDefault4 := false
 	foundDefault6 := false
 	for _, route := range cfg.Routes {
@@ -361,12 +361,10 @@ func configureInterface(cfg *Config, tun *tun.NativeTun) (retErr error) {
 		} else if route.Addr().Is6() {
 			gateway = firstGateway6
 		}
-		r := &routeData{
-			RouteData: winipcfg.RouteData{
-				Destination: route,
-				NextHop:     gateway,
-				Metric:      0,
-			},
+		r := &winipcfg.RouteData{
+			Destination: route,
+			NextHop:     gateway,
+			Metric:      0,
 		}
 		if r.Destination.Addr().Unmap() == gateway {
 			// no need to add a route for the interface's
@@ -395,9 +393,9 @@ func configureInterface(cfg *Config, tun *tun.NativeTun) (retErr error) {
 		return fmt.Errorf("syncAddresses: %w", err)
 	}
 
-	slices.SortFunc(routes, (*routeData).Compare)
+	slices.SortFunc(routes, routeDataCompare)
 
-	deduplicatedRoutes := []*routeData{}
+	deduplicatedRoutes := []*winipcfg.RouteData{}
 	for i := 0; i < len(routes); i++ {
 		// There's only one way to get to a given IP+Mask, so delete
 		// all matches after the first.
@@ -598,26 +596,18 @@ func syncAddresses(ifc *winipcfg.IPAdapterAddresses, want []netip.Prefix) error 
 	return erracc
 }
 
-// routeData wraps winipcfg.RouteData with an additional field that permits
-// caching of the associated MibIPForwardRow2; by keeping it around, we can
-// avoid unnecessary (and slow) lookups of information that we already have.
-type routeData struct {
-	winipcfg.RouteData
-	Row *winipcfg.MibIPforwardRow2
+func routeDataLess(a, b *winipcfg.RouteData) bool {
+	return routeDataCompare(a, b) < 0
 }
 
-func (rd *routeData) Less(other *routeData) bool {
-	return rd.Compare(other) < 0
-}
-
-func (rd *routeData) Compare(other *routeData) int {
-	v := rd.Destination.Addr().Compare(other.Destination.Addr())
+func routeDataCompare(a, b *winipcfg.RouteData) int {
+	v := a.Destination.Addr().Compare(b.Destination.Addr())
 	if v != 0 {
 		return v
 	}
 
 	// Narrower masks first
-	b1, b2 := rd.Destination.Bits(), other.Destination.Bits()
+	b1, b2 := a.Destination.Bits(), b.Destination.Bits()
 	if b1 != b2 {
 		if b1 > b2 {
 			return -1
@@ -626,31 +616,31 @@ func (rd *routeData) Compare(other *routeData) int {
 	}
 
 	// No nexthop before non-empty nexthop
-	v = rd.NextHop.Compare(other.NextHop)
+	v = a.NextHop.Compare(b.NextHop)
 	if v != 0 {
 		return v
 	}
 
 	// Lower metrics first
-	if rd.Metric < other.Metric {
+	if a.Metric < b.Metric {
 		return -1
-	} else if rd.Metric > other.Metric {
+	} else if a.Metric > b.Metric {
 		return 1
 	}
 
 	return 0
 }
 
-func deltaRouteData(a, b []*routeData) (add, del []*routeData) {
-	add = make([]*routeData, 0, len(b))
-	del = make([]*routeData, 0, len(a))
-	slices.SortFunc(a, (*routeData).Compare)
-	slices.SortFunc(b, (*routeData).Compare)
+func deltaRouteData(a, b []*winipcfg.RouteData) (add, del []*winipcfg.RouteData) {
+	add = make([]*winipcfg.RouteData, 0, len(b))
+	del = make([]*winipcfg.RouteData, 0, len(a))
+	slices.SortFunc(a, routeDataCompare)
+	slices.SortFunc(b, routeDataCompare)
 
 	i := 0
 	j := 0
 	for i < len(a) && j < len(b) {
-		switch a[i].Compare(b[j]) {
+		switch routeDataCompare(a[i], b[j]) {
 		case -1:
 			// a < b, delete
 			del = append(del, a[i])
@@ -687,7 +677,7 @@ func getInterfaceRoutes(ifc *winipcfg.IPAdapterAddresses, family winipcfg.Addres
 	return
 }
 
-func getAllInterfaceRoutes(ifc *winipcfg.IPAdapterAddresses) ([]*routeData, error) {
+func getAllInterfaceRoutes(ifc *winipcfg.IPAdapterAddresses) ([]*winipcfg.RouteData, error) {
 	routes4, err := getInterfaceRoutes(ifc, windows.AF_INET)
 	if err != nil {
 		return nil, err
@@ -698,27 +688,19 @@ func getAllInterfaceRoutes(ifc *winipcfg.IPAdapterAddresses) ([]*routeData, erro
 		// TODO: what if v6 unavailable?
 		return nil, err
 	}
-
-	rd := make([]*routeData, 0, len(routes4)+len(routes6))
+	rd := make([]*winipcfg.RouteData, 0, len(routes4)+len(routes6))
 	for _, r := range routes4 {
-		rd = append(rd, &routeData{
-			RouteData: winipcfg.RouteData{
-				Destination: r.DestinationPrefix.Prefix(),
-				NextHop:     r.NextHop.Addr(),
-				Metric:      r.Metric,
-			},
-			Row: r,
+		rd = append(rd, &winipcfg.RouteData{
+			Destination: r.DestinationPrefix.Prefix(),
+			NextHop:     r.NextHop.Addr(),
+			Metric:      r.Metric,
 		})
 	}
-
 	for _, r := range routes6 {
-		rd = append(rd, &routeData{
-			RouteData: winipcfg.RouteData{
-				Destination: r.DestinationPrefix.Prefix(),
-				NextHop:     r.NextHop.Addr(),
-				Metric:      r.Metric,
-			},
-			Row: r,
+		rd = append(rd, &winipcfg.RouteData{
+			Destination: r.DestinationPrefix.Prefix(),
+			NextHop:     r.NextHop.Addr(),
+			Metric:      r.Metric,
 		})
 	}
 	return rd, nil
@@ -726,7 +708,7 @@ func getAllInterfaceRoutes(ifc *winipcfg.IPAdapterAddresses) ([]*routeData, erro
 
 // filterRoutes removes routes that have been added by Windows and should not
 // be managed by us.
-func filterRoutes(routes []*routeData, dontDelete []netip.Prefix) []*routeData {
+func filterRoutes(routes []*winipcfg.RouteData, dontDelete []netip.Prefix) []*winipcfg.RouteData {
 	ddm := make(map[netip.Prefix]bool)
 	for _, dd := range dontDelete {
 		// See issue 1448: we don't want to touch the routes added
@@ -745,7 +727,7 @@ func filterRoutes(routes []*routeData, dontDelete []netip.Prefix) []*routeData {
 		lastIP := netipx.RangeOfPrefix(nr).To()
 		ddm[netip.PrefixFrom(lastIP, lastIP.BitLen())] = true
 	}
-	filtered := make([]*routeData, 0, len(routes))
+	filtered := make([]*winipcfg.RouteData, 0, len(routes))
 	for _, r := range routes {
 		rr := r.Destination
 		if rr.IsValid() && ddm[rr] {
@@ -760,7 +742,7 @@ func filterRoutes(routes []*routeData, dontDelete []netip.Prefix) []*routeData {
 // This avoids a full ifc.FlushRoutes call.
 // dontDelete is a list of interface address routes that the
 // synchronization logic should never delete.
-func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*routeData, dontDelete []netip.Prefix) error {
+func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*winipcfg.RouteData, dontDelete []netip.Prefix) error {
 	existingRoutes, err := getAllInterfaceRoutes(ifc)
 	if err != nil {
 		return err
@@ -771,15 +753,7 @@ func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*routeData, dontDelete 
 
 	var errs []error
 	for _, a := range del {
-		var err error
-		if a.Row == nil {
-			// DeleteRoute requires a routing table lookup, so only do that if
-			// a does not already have the row.
-			err = ifc.LUID.DeleteRoute(a.Destination, a.NextHop)
-		} else {
-			// Otherwise, delete the row directly.
-			err = a.Row.Delete()
-		}
+		err := ifc.LUID.DeleteRoute(a.Destination, a.NextHop)
 		if err != nil {
 			dstStr := a.Destination.String()
 			if dstStr == "169.254.255.255/32" {

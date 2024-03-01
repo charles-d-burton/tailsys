@@ -12,28 +12,27 @@ import (
 
 type Coordinator struct {
 	connections.Tailnet
-  devMode bool
+	devMode bool
 }
 
 type Option func(co *Coordinator) error
 
-
 func (co *Coordinator) NewCoordinator(ctx context.Context, opts ...Option) error {
 
-  for _, opt := range opts {
-    err := opt(co)
-    if err != nil {
-      return err
-    }
-  }
+	for _, opt := range opts {
+		err := opt(co)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (co *Coordinator) WithDevMode(mode bool) Option {
-  return func(co *Coordinator) error {
-    co.devMode = mode
-    return nil
-  }
+	return func(co *Coordinator) error {
+		co.devMode = mode
+		return nil
+	}
 }
 
 func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
@@ -45,22 +44,22 @@ func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
 // RegistrationServer struct to contain proto for gRPC
 type RegistrationServer struct {
 	pb.UnimplementedRegistrationServer
-  DevMode bool
-  ID string
+	DevMode bool
+	ID      string
 }
 
 // RegisterNode send the key to the server to register a node
 func (p *RegistrationServer) Register(ctx context.Context, in *pb.NodeRegistrationRequest) (*pb.NodeRegistrationResponse, error) {
 	fmt.Println("received coordination request")
 	fmt.Println(in)
-  if p.DevMode {
-    id := uuid.New()
-    fmt.Println("running in dev mode, accepting all incoming connections")
-    return &pb.NodeRegistrationResponse{
-      Accepted: true,
-      Key:      &pb.Key{Key: id.String()},
-    }, nil
-  }
+	if p.DevMode {
+		id := uuid.New()
+		fmt.Println("running in dev mode, accepting all incoming connections")
+		return &pb.NodeRegistrationResponse{
+			Accepted: true,
+			Key:      &pb.Key{Key: id.String()},
+		}, nil
+	}
 	return &pb.NodeRegistrationResponse{
 		Accepted: true,
 		Key:      &pb.Key{Key: "coordination-server-key"},

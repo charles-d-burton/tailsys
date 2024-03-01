@@ -8,11 +8,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"expvar"
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net"
 	"net/netip"
 	"os"
@@ -38,7 +36,6 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 	"tailscale.com/envknob"
 	"tailscale.com/ipn/ipnlocal"
-	"tailscale.com/metrics"
 	"tailscale.com/net/dns"
 	"tailscale.com/net/netaddr"
 	"tailscale.com/net/packet"
@@ -48,7 +45,6 @@ import (
 	"tailscale.com/proxymap"
 	"tailscale.com/syncs"
 	"tailscale.com/tailcfg"
-	"tailscale.com/tailfs"
 	"tailscale.com/types/ipproto"
 	"tailscale.com/types/logger"
 	"tailscale.com/types/netmap"
@@ -64,8 +60,8 @@ const debugPackets = false
 var debugNetstack = envknob.RegisterBool("TS_DEBUG_NETSTACK")
 
 var (
-	serviceIP   = tsaddr.TailscaleServiceIP()
-	serviceIPv6 = tsaddr.TailscaleServiceIPv6()
+	magicDNSIP   = tsaddr.TailscaleServiceIP()
+	magicDNSIPv6 = tsaddr.TailscaleServiceIPv6()
 )
 
 func init() {
@@ -121,19 +117,18 @@ type Impl struct {
 	// It can only be set before calling Start.
 	ProcessSubnets bool
 
-	ipstack        *stack.Stack
-	linkEP         *channel.Endpoint
-	tundev         *tstun.Wrapper
-	e              wgengine.Engine
-	pm             *proxymap.Mapper
-	mc             *magicsock.Conn
-	logf           logger.Logf
-	dialer         *tsdial.Dialer
-	ctx            context.Context        // alive until Close
-	ctxCancel      context.CancelFunc     // called on Close
-	lb             *ipnlocal.LocalBackend // or nil
-	dns            *dns.Manager
-	tailFSForLocal tailfs.FileSystemForLocal // or nil
+	ipstack   *stack.Stack
+	linkEP    *channel.Endpoint
+	tundev    *tstun.Wrapper
+	e         wgengine.Engine
+	pm        *proxymap.Mapper
+	mc        *magicsock.Conn
+	logf      logger.Logf
+	dialer    *tsdial.Dialer
+	ctx       context.Context        // alive until Close
+	ctxCancel context.CancelFunc     // called on Close
+	lb        *ipnlocal.LocalBackend // or nil
+	dns       *dns.Manager
 
 	peerapiPort4Atomic atomic.Uint32 // uint16 port number for IPv4 peerapi
 	peerapiPort6Atomic atomic.Uint32 // uint16 port number for IPv6 peerapi
@@ -161,7 +156,7 @@ const nicID = 1
 const maxUDPPacketSize = tstun.MaxPacketSize
 
 // Create creates and populates a new Impl.
-func Create(logf logger.Logf, tundev *tstun.Wrapper, e wgengine.Engine, mc *magicsock.Conn, dialer *tsdial.Dialer, dns *dns.Manager, pm *proxymap.Mapper, tailFSForLocal tailfs.FileSystemForLocal) (*Impl, error) {
+func Create(logf logger.Logf, tundev *tstun.Wrapper, e wgengine.Engine, mc *magicsock.Conn, dialer *tsdial.Dialer, dns *dns.Manager, pm *proxymap.Mapper) (*Impl, error) {
 	if mc == nil {
 		return nil, errors.New("nil magicsock.Conn")
 	}
@@ -241,7 +236,6 @@ func Create(logf logger.Logf, tundev *tstun.Wrapper, e wgengine.Engine, mc *magi
 		dialer:              dialer,
 		connsOpenBySubnetIP: make(map[netip.Addr]int),
 		dns:                 dns,
-		tailFSForLocal:      tailFSForLocal,
 	}
 	ns.ctx, ns.ctxCancel = context.WithCancel(context.Background())
 	ns.atomicIsLocalIPFunc.Store(tsaddr.FalseContainsIPFunc())
@@ -443,16 +437,16 @@ func (ns *Impl) handleLocalPackets(p *packet.Parsed, t *tstun.Wrapper) filter.Re
 		return filter.DropSilently
 	}
 
-	// If it's not traffic to the service IP (e.g. magicDNS or TailFS) we don't
+	// If it's not traffic to the service IP (i.e. magicDNS) we don't
 	// care; resume processing.
-	if dst := p.Dst.Addr(); dst != serviceIP && dst != serviceIPv6 {
+	if dst := p.Dst.Addr(); dst != magicDNSIP && dst != magicDNSIPv6 {
 		return filter.Accept
 	}
 	// Of traffic to the service IP, we only care about UDP 53, and TCP
-	// on port 53, 80, and 8080.
+	// on port 80 & 53.
 	switch p.IPProto {
 	case ipproto.TCP:
-		if port := p.Dst.Port(); port != 53 && port != 80 && port != 8080 {
+		if port := p.Dst.Port(); port != 53 && port != 80 {
 			return filter.Accept
 		}
 	case ipproto.UDP:
@@ -549,12 +543,12 @@ func (ns *Impl) inject() {
 		if b := pkt.NetworkHeader().Slice(); len(b) >= 20 { // min ipv4 header
 			switch b[0] >> 4 { // ip proto field
 			case 4:
-				if srcIP := netaddr.IPv4(b[12], b[13], b[14], b[15]); serviceIP == srcIP {
+				if srcIP := netaddr.IPv4(b[12], b[13], b[14], b[15]); magicDNSIP == srcIP {
 					sendToHost = true
 				}
 			case 6:
 				if len(b) >= 40 { // min ipv6 header
-					if srcIP, ok := netip.AddrFromSlice(net.IP(b[8:24])); ok && serviceIPv6 == srcIP {
+					if srcIP, ok := netip.AddrFromSlice(net.IP(b[8:24])); ok && magicDNSIPv6 == srcIP {
 						sendToHost = true
 					}
 				}
@@ -919,16 +913,13 @@ func (ns *Impl) acceptTCP(r *tcp.ForwarderRequest) {
 		return gonet.NewTCPConn(&wq, ep)
 	}
 
-	// Local Services (DNS and WebDAV)
-	hittingServiceIP := dialIP == serviceIP || dialIP == serviceIPv6
-	hittingDNS := hittingServiceIP && reqDetails.LocalPort == 53
-	if hittingDNS {
+	// DNS
+	if reqDetails.LocalPort == 53 && (dialIP == magicDNSIP || dialIP == magicDNSIPv6) {
 		c := getConnOrReset()
 		if c == nil {
 			return
 		}
-		addrPort := netip.AddrPortFrom(clientRemoteIP, reqDetails.RemotePort)
-		go ns.dns.HandleTCPConn(c, addrPort)
+		go ns.dns.HandleTCPConn(c, netip.AddrPortFrom(clientRemoteIP, reqDetails.RemotePort))
 		return
 	}
 
@@ -1062,13 +1053,13 @@ func (ns *Impl) acceptUDP(r *udp.ForwarderRequest) {
 	}
 
 	// Handle magicDNS traffic (via UDP) here.
-	if dst := dstAddr.Addr(); dst == serviceIP || dst == serviceIPv6 {
+	if dst := dstAddr.Addr(); dst == magicDNSIP || dst == magicDNSIPv6 {
 		if dstAddr.Port() != 53 {
 			ep.Close()
 			return // Only MagicDNS traffic runs on the service IPs for now.
 		}
 
-		c := gonet.NewUDPConn(&wq, ep)
+		c := gonet.NewUDPConn(ns.ipstack, &wq, ep)
 		go ns.handleMagicDNSUDP(srcAddr, c)
 		return
 	}
@@ -1080,12 +1071,12 @@ func (ns *Impl) acceptUDP(r *udp.ForwarderRequest) {
 				ep.Close()
 				return
 			}
-			go h(gonet.NewUDPConn(&wq, ep))
+			go h(gonet.NewUDPConn(ns.ipstack, &wq, ep))
 			return
 		}
 	}
 
-	c := gonet.NewUDPConn(&wq, ep)
+	c := gonet.NewUDPConn(ns.ipstack, &wq, ep)
 	go ns.forwardUDP(c, srcAddr, dstAddr)
 }
 
@@ -1267,152 +1258,4 @@ func ipPortOfNetstackAddr(a tcpip.Address, port uint16) (ipp netip.AddrPort, ok 
 		return netip.AddrPortFrom(addr, port), true
 	}
 	return netip.AddrPort{}, false
-}
-
-func readStatCounter(sc *tcpip.StatCounter) int64 {
-	vv := sc.Value()
-	if vv > math.MaxInt64 {
-		return int64(math.MaxInt64)
-	}
-	return int64(vv)
-}
-
-// ExpVar returns an expvar variable suitable for registering with expvar.Publish.
-func (ns *Impl) ExpVar() expvar.Var {
-	m := new(metrics.Set)
-
-	// Global metrics
-	stats := ns.ipstack.Stats()
-	m.Set("gauge_dropped_packets", expvar.Func(func() any {
-		return readStatCounter(stats.DroppedPackets)
-	}))
-
-	// IP statistics
-	ipStats := ns.ipstack.Stats().IP
-	ipMetrics := []struct {
-		name  string
-		field *tcpip.StatCounter
-	}{
-		{"packets_received", ipStats.PacketsReceived},
-		{"valid_packets_received", ipStats.ValidPacketsReceived},
-		{"disabled_packets_received", ipStats.DisabledPacketsReceived},
-		{"invalid_destination_addresses_received", ipStats.InvalidDestinationAddressesReceived},
-		{"invalid_source_addresses_received", ipStats.InvalidSourceAddressesReceived},
-		{"packets_delivered", ipStats.PacketsDelivered},
-		{"packets_sent", ipStats.PacketsSent},
-		{"outgoing_packet_errors", ipStats.OutgoingPacketErrors},
-		{"malformed_packets_received", ipStats.MalformedPacketsReceived},
-		{"malformed_fragments_received", ipStats.MalformedFragmentsReceived},
-		{"iptables_prerouting_dropped", ipStats.IPTablesPreroutingDropped},
-		{"iptables_input_dropped", ipStats.IPTablesInputDropped},
-		{"iptables_forward_dropped", ipStats.IPTablesForwardDropped},
-		{"iptables_output_dropped", ipStats.IPTablesOutputDropped},
-		{"iptables_postrouting_dropped", ipStats.IPTablesPostroutingDropped},
-		{"option_timestamp_received", ipStats.OptionTimestampReceived},
-		{"option_record_route_received", ipStats.OptionRecordRouteReceived},
-		{"option_router_alert_received", ipStats.OptionRouterAlertReceived},
-		{"option_unknown_received", ipStats.OptionUnknownReceived},
-	}
-	for _, metric := range ipMetrics {
-		metric := metric
-		m.Set("gauge_ip_"+metric.name, expvar.Func(func() any {
-			return readStatCounter(metric.field)
-		}))
-	}
-
-	// IP forwarding statistics
-	fwdStats := ipStats.Forwarding
-	fwdMetrics := []struct {
-		name  string
-		field *tcpip.StatCounter
-	}{
-		{"unrouteable", fwdStats.Unrouteable},
-		{"exhausted_ttl", fwdStats.ExhaustedTTL},
-		{"initializing_source", fwdStats.InitializingSource},
-		{"link_local_source", fwdStats.LinkLocalSource},
-		{"link_local_destination", fwdStats.LinkLocalDestination},
-		{"packet_too_big", fwdStats.PacketTooBig},
-		{"host_unreachable", fwdStats.HostUnreachable},
-		{"extension_header_problem", fwdStats.ExtensionHeaderProblem},
-		{"unexpected_multicast_input_interface", fwdStats.UnexpectedMulticastInputInterface},
-		{"unknown_output_endpoint", fwdStats.UnknownOutputEndpoint},
-		{"no_multicast_pending_queue_buffer_space", fwdStats.NoMulticastPendingQueueBufferSpace},
-		{"outgoing_device_no_buffer_space", fwdStats.OutgoingDeviceNoBufferSpace},
-		{"errors", fwdStats.Errors},
-	}
-	for _, metric := range fwdMetrics {
-		metric := metric
-		m.Set("gauge_ip_forward_"+metric.name, expvar.Func(func() any {
-			return readStatCounter(metric.field)
-		}))
-	}
-
-	// TCP metrics
-	tcpStats := ns.ipstack.Stats().TCP
-	tcpMetrics := []struct {
-		name  string
-		field *tcpip.StatCounter
-	}{
-		{"active_connection_openings", tcpStats.ActiveConnectionOpenings},
-		{"passive_connection_openings", tcpStats.PassiveConnectionOpenings},
-		{"current_established", tcpStats.CurrentEstablished},
-		{"current_connected", tcpStats.CurrentConnected},
-		{"established_resets", tcpStats.EstablishedResets},
-		{"established_closed", tcpStats.EstablishedClosed},
-		{"established_timeout", tcpStats.EstablishedTimedout},
-		{"listen_overflow_syn_drop", tcpStats.ListenOverflowSynDrop},
-		{"listen_overflow_ack_drop", tcpStats.ListenOverflowAckDrop},
-		{"listen_overflow_syn_cookie_sent", tcpStats.ListenOverflowSynCookieSent},
-		{"listen_overflow_syn_cookie_rcvd", tcpStats.ListenOverflowSynCookieRcvd},
-		{"listen_overflow_invalid_syn_cookie_rcvd", tcpStats.ListenOverflowInvalidSynCookieRcvd},
-		{"failed_connection_attempts", tcpStats.FailedConnectionAttempts},
-		{"valid_segments_received", tcpStats.ValidSegmentsReceived},
-		{"invalid_segments_received", tcpStats.InvalidSegmentsReceived},
-		{"segments_sent", tcpStats.SegmentsSent},
-		{"segment_send_errors", tcpStats.SegmentSendErrors},
-		{"resets_sent", tcpStats.ResetsSent},
-		{"resets_received", tcpStats.ResetsReceived},
-		{"retransmits", tcpStats.Retransmits},
-		{"fast_recovery", tcpStats.FastRecovery},
-		{"sack_recovery", tcpStats.SACKRecovery},
-		{"tlp_recovery", tcpStats.TLPRecovery},
-		{"slow_start_retransmits", tcpStats.SlowStartRetransmits},
-		{"fast_retransmit", tcpStats.FastRetransmit},
-		{"timeouts", tcpStats.Timeouts},
-		{"checksum_errors", tcpStats.ChecksumErrors},
-		{"failed_port_reservations", tcpStats.FailedPortReservations},
-		{"segments_acked_with_dsack", tcpStats.SegmentsAckedWithDSACK},
-		{"spurious_recovery", tcpStats.SpuriousRecovery},
-		{"spurious_rto_recovery", tcpStats.SpuriousRTORecovery},
-		{"gauge_tcp_forward_max_in_flight_drop", tcpStats.ForwardMaxInFlightDrop},
-	}
-	for _, metric := range tcpMetrics {
-		metric := metric
-		m.Set("gauge_tcp_"+metric.name, expvar.Func(func() any {
-			return readStatCounter(metric.field)
-		}))
-	}
-
-	// UDP metrics
-	udpStats := ns.ipstack.Stats().UDP
-	udpMetrics := []struct {
-		name  string
-		field *tcpip.StatCounter
-	}{
-		{"packets_received", udpStats.PacketsReceived},
-		{"unknown_port_errors", udpStats.UnknownPortErrors},
-		{"receive_buffer_errors", udpStats.ReceiveBufferErrors},
-		{"malformed_packets_received", udpStats.MalformedPacketsReceived},
-		{"packets_sent", udpStats.PacketsSent},
-		{"packet_send_errors", udpStats.PacketSendErrors},
-		{"checksum_errors", udpStats.ChecksumErrors},
-	}
-	for _, metric := range udpMetrics {
-		metric := metric
-		m.Set("gauge_udp_"+metric.name, expvar.Func(func() any {
-			return readStatCounter(metric.field)
-		}))
-	}
-
-	return m
 }

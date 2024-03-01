@@ -6,7 +6,6 @@ package netcheck
 
 import (
 	"bufio"
-	"cmp"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -42,6 +41,7 @@ import (
 	"tailscale.com/types/opt"
 	"tailscale.com/types/views"
 	"tailscale.com/util/clientmetric"
+	"tailscale.com/util/cmpx"
 	"tailscale.com/util/mak"
 )
 
@@ -447,7 +447,7 @@ func makeProbePlan(dm *tailcfg.DERPMap, ifState *interfaces.State, last *Report)
 				do6 = false
 			}
 			n := reg.Nodes[try%len(reg.Nodes)]
-			prevLatency := cmp.Or(
+			prevLatency := cmpx.Or(
 				last.RegionLatency[reg.RegionID]*120/100,
 				defaultActiveRetransmitTime)
 			delay := time.Duration(try) * prevLatency
@@ -1602,7 +1602,7 @@ func (rs *reportState) runProbe(ctx context.Context, dm *tailcfg.DERPMap, probe 
 // proto is 4 or 6
 // If it returns nil, the node is skipped.
 func (c *Client) nodeAddr(ctx context.Context, n *tailcfg.DERPNode, proto probeProto) (ap netip.AddrPort) {
-	port := cmp.Or(n.STUNPort, 3478)
+	port := cmpx.Or(n.STUNPort, 3478)
 	if port < 0 || port > 1<<16-1 {
 		return
 	}

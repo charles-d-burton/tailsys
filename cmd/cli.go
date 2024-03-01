@@ -25,7 +25,7 @@ const (
 	authKeyFlag     = "auth-key"
 	portFlag        = "port"
 	hostnameFlag    = "hostname"
-  tsnetVerbose = "tsnet-verbose"
+	tsnetVerbose    = "tsnet-verbose"
 )
 
 func StartCLI() error {
@@ -90,11 +90,11 @@ func globalFlags() []cli.Flag {
 			Usage:   "set tailnet hostname",
 			EnvVars: []string{"TS_HOSTNAME", "HOSTNAME"},
 		},
-    //TODO: This does not currently do anything
-    &cli.BoolFlag{
-      Name: tsnetVerbose,
-      Usage: "enable verbose tsnet logging", 
-    },
+		//TODO: This does not currently do anything
+		&cli.BoolFlag{
+			Name:  tsnetVerbose,
+			Usage: "enable verbose tsnet logging",
+		},
 	}
 }
 
@@ -105,7 +105,7 @@ func coordinationServerCommand() *cli.Command {
 		Usage:   "Start the application in server mode",
 		Action: func(ctx *cli.Context) error {
 			fmt.Println("starting the server code")
-      var co coordination.Coordinator
+			var co coordination.Coordinator
 			err := co.NewCoordinator(ctx.Context, co.WithDevMode(ctx.Bool("dev")))
 			authType, err := getAuthType(ctx)
 			if err != nil {
@@ -130,8 +130,8 @@ func coordinationServerCommand() *cli.Command {
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
-				Name:        "dev",
-				Usage:       "set to enable dev mode, all node registration automatically accepted",
+				Name:  "dev",
+				Usage: "set to enable dev mode, all node registration automatically accepted",
 			},
 		},
 	}

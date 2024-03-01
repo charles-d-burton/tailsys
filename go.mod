@@ -1,15 +1,15 @@
 module github.com/charles-d-burton/tailsys
 
-go 1.22.0
+go 1.21.7
 
 require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.6.0
-	github.com/tailscale/tailscale-client-go v1.16.0
+	github.com/tailscale/tailscale-client-go v1.15.0
 	github.com/urfave/cli/v2 v2.27.1
 	google.golang.org/grpc v1.62.0
 	google.golang.org/protobuf v1.32.0
-	tailscale.com v1.60.1
+	tailscale.com v1.58.2
 )
 
 require (

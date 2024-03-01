@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -36,10 +37,10 @@ func (cs Checksum) String() string {
 	return hex.EncodeToString(cs.cs[:])
 }
 func (cs Checksum) AppendText(b []byte) ([]byte, error) {
-	return hex.AppendEncode(b, cs.cs[:]), nil
+	return hexAppendEncode(b, cs.cs[:]), nil
 }
 func (cs Checksum) MarshalText() ([]byte, error) {
-	return hex.AppendEncode(nil, cs.cs[:]), nil
+	return hexAppendEncode(nil, cs.cs[:]), nil
 }
 func (cs *Checksum) UnmarshalText(b []byte) error {
 	if len(b) != 2*len(cs.cs) {
@@ -47,6 +48,14 @@ func (cs *Checksum) UnmarshalText(b []byte) error {
 	}
 	_, err := hex.Decode(cs.cs[:], b)
 	return err
+}
+
+// TODO(https://go.dev/issue/53693): Use hex.AppendEncode instead.
+func hexAppendEncode(dst, src []byte) []byte {
+	n := hex.EncodedLen(len(src))
+	dst = slices.Grow(dst, n)
+	hex.Encode(dst[len(dst):][:n], src)
+	return dst[:len(dst)+n]
 }
 
 // PartialFiles returns a list of partial files in [Handler.Dir]

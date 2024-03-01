@@ -10,9 +10,8 @@ import (
 )
 
 var (
-	timeTimeType   = reflect.TypeFor[time.Time]()
-	netipAddrType  = reflect.TypeFor[netip.Addr]()
-	selfHasherType = reflect.TypeFor[SelfHasher]()
+	timeTimeType  = reflect.TypeOf((*time.Time)(nil)).Elem()
+	netipAddrType = reflect.TypeOf((*netip.Addr)(nil)).Elem()
 )
 
 // typeIsSpecialized reports whether this type has specialized hashing.
@@ -22,11 +21,6 @@ func typeIsSpecialized(t reflect.Type) bool {
 	case timeTimeType, netipAddrType:
 		return true
 	default:
-		if t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface {
-			if t.Implements(selfHasherType) || reflect.PointerTo(t).Implements(selfHasherType) {
-				return true
-			}
-		}
 		return false
 	}
 }

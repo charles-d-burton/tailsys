@@ -95,14 +95,6 @@ const (
 	// In this mode, API calls are authenticated via platform auth.
 	LoginServerMode ServerMode = "login"
 
-	// ReadOnlyServerMode is identical to LoginServerMode,
-	// but does not present a login button to switch to manage mode,
-	// even if the management client is running and reachable.
-	//
-	// This is designed for platforms where the device is configured by other means,
-	// such as Home Assistant's declarative YAML configuration.
-	ReadOnlyServerMode ServerMode = "readonly"
-
 	// ManageServerMode serves a management client for editing tailscale
 	// settings of a node.
 	//
@@ -162,7 +154,7 @@ type ServerOpts struct {
 // and not the lifespan of the web server.
 func NewServer(opts ServerOpts) (s *Server, err error) {
 	switch opts.Mode {
-	case LoginServerMode, ReadOnlyServerMode, ManageServerMode:
+	case LoginServerMode, ManageServerMode:
 		// valid types
 	case "":
 		return nil, fmt.Errorf("must specify a Mode")
@@ -215,14 +207,10 @@ func NewServer(opts ServerOpts) (s *Server, err error) {
 	// The client is secured by limiting the interface it listens on,
 	// or by authenticating requests before they reach the web client.
 	csrfProtect := csrf.Protect(s.csrfKey(), csrf.Secure(false))
-	switch s.mode {
-	case LoginServerMode:
+	if s.mode == LoginServerMode {
 		s.apiHandler = csrfProtect(http.HandlerFunc(s.serveLoginAPI))
 		metric = "web_login_client_initialization"
-	case ReadOnlyServerMode:
-		s.apiHandler = csrfProtect(http.HandlerFunc(s.serveLoginAPI))
-		metric = "web_readonly_client_initialization"
-	case ManageServerMode:
+	} else {
 		s.apiHandler = csrfProtect(http.HandlerFunc(s.serveAPI))
 		metric = "web_client_initialization"
 	}
@@ -477,7 +465,7 @@ func (s *Server) serveAPIAuth(w http.ResponseWriter, r *http.Request) {
 	session, whois, status, sErr := s.getSession(r)
 
 	if whois != nil {
-		caps, err := toPeerCapabilities(status, whois)
+		caps, err := toPeerCapabilities(whois)
 		if err != nil {
 			http.Error(w, sErr.Error(), http.StatusInternalServerError)
 			return
@@ -495,7 +483,7 @@ func (s *Server) serveAPIAuth(w http.ResponseWriter, r *http.Request) {
 
 	// First verify platform auth.
 	// If platform auth is needed, this should happen first.
-	if s.mode == LoginServerMode || s.mode == ReadOnlyServerMode {
+	if s.mode == LoginServerMode {
 		switch distro.Get() {
 		case distro.Synology:
 			authorized, err := authorizeSynology(r)

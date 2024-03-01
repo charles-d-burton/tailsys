@@ -270,8 +270,8 @@ github.com/tailscale/hujson
 # github.com/tailscale/netlink v1.1.1-0.20211101221916-cabfb018fe85
 ## explicit; go 1.12
 github.com/tailscale/netlink
-# github.com/tailscale/tailscale-client-go v1.16.0
-## explicit; go 1.22.0
+# github.com/tailscale/tailscale-client-go v1.15.0
+## explicit; go 1.19
 github.com/tailscale/tailscale-client-go/tailscale
 # github.com/tailscale/web-client-prebuilt v0.0.0-20240208184856-443a64766f61
 ## explicit; go 1.21
@@ -570,8 +570,8 @@ nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/util
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
-# tailscale.com v1.60.1
-## explicit; go 1.22.0
+# tailscale.com v1.58.2
+## explicit; go 1.21
 tailscale.com
 tailscale.com/appc
 tailscale.com/atomicfile
@@ -660,7 +660,6 @@ tailscale.com/smallzstd
 tailscale.com/syncs
 tailscale.com/tailcfg
 tailscale.com/taildrop
-tailscale.com/tailfs
 tailscale.com/tempfork/device
 tailscale.com/tempfork/heap
 tailscale.com/tka
@@ -691,6 +690,7 @@ tailscale.com/types/views
 tailscale.com/util/clientmetric
 tailscale.com/util/cloudenv
 tailscale.com/util/cmpver
+tailscale.com/util/cmpx
 tailscale.com/util/ctxkey
 tailscale.com/util/deephash
 tailscale.com/util/dirwalk

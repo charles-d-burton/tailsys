@@ -11,6 +11,7 @@ services:
       - DEV_MODE=true
     command:
       - co
+      - dev
       
   client:
     build:

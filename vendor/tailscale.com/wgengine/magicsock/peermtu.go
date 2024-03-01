@@ -5,13 +5,7 @@
 
 package magicsock
 
-import (
-	"errors"
-
-	"golang.org/x/sys/unix"
-	"tailscale.com/disco"
-	"tailscale.com/net/tstun"
-)
+import "tailscale.com/net/tstun"
 
 // Peer path MTU routines shared by platforms that implement it.
 
@@ -115,16 +109,4 @@ func (c *Conn) UpdatePMTUD() {
 	}
 	c.peerMTUEnabled.Store(newStatus)
 	c.resetEndpointStates()
-}
-
-var errEMSGSIZE error = unix.EMSGSIZE
-
-func pmtuShouldLogDiscoTxErr(m disco.Message, err error) bool {
-	// Large disco.Ping packets used to probe path MTU may result in
-	// an EMSGSIZE error fairly regularly which can pollute logs.
-	p, ok := m.(*disco.Ping)
-	if !ok || p.Padding == 0 || !errors.Is(err, errEMSGSIZE) || debugPMTUD() {
-		return true
-	}
-	return false
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/services"
 	"google.golang.org/grpc"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -37,6 +38,7 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 		}
 		defer conn.Close()
 		c := pb.NewRegistrationClient(conn)
+		id := uuid.New()
 
 		r, err := c.Register(ctx, &pb.NodeRegistrationRequest{
 			Info: &pb.SysInfo{
@@ -45,7 +47,7 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 				Ip:       cl.Addr,
 				LastSeen: timestamppb.Now(),
 			},
-			Key:        &pb.Key{Key: "randomstring"},
+			Key:        &pb.Key{Key: id.String()},
 			SystemType: pb.SystemType_CLIENT,
 		})
 
