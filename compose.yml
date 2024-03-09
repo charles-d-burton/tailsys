@@ -8,10 +8,9 @@ services:
       - TS_CLIENT_ID=${TS_CLIENT_ID}
       - TS_CLIENT_SECRET=${TS_CLIENT_SECRET}
       - TS_HOSTNAME=tailsys-coordination-test
-      - DEV_MODE=true
+      - TS_DEV=true
     command:
       - co
-      - dev
       
   client:
     build:
@@ -21,9 +20,9 @@ services:
       - TS_CLIENT_ID=${TS_CLIENT_ID}
       - TS_CLIENT_SECRET=${TS_CLIENT_SECRET}
       - TS_HOSTNAME=tailsys-client-test
-      - COORDINATION_SERVER=tailsys-coordination-test:6655
+      - TS_COORDINATION_SERVER=tailsys-coordination-test:6655
     command:
-      - c
+      - client
 
   # command-test:
   #   build:

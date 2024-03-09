@@ -7,6 +7,7 @@ package tailcfg
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,6 @@ import (
 	"tailscale.com/types/opt"
 	"tailscale.com/types/structs"
 	"tailscale.com/types/tkatype"
-	"tailscale.com/util/cmpx"
 	"tailscale.com/util/dnsname"
 	"tailscale.com/util/slicesx"
 )
@@ -106,7 +106,7 @@ type CapabilityVersion int
 //   - 63: 2023-06-08: Client understands SSHAction.AllowRemotePortForwarding.
 //   - 64: 2023-07-11: Client understands s/CapabilityTailnetLockAlpha/CapabilityTailnetLock
 //   - 65: 2023-07-12: Client understands DERPMap.HomeParams + incremental DERPMap updates with params
-//   - 66: 2023-07-23: UserProfile.Groups added (available via WhoIs)
+//   - 66: 2023-07-23: UserProfile.Groups added (available via WhoIs) (removed in 87)
 //   - 67: 2023-07-25: Client understands PeerCapMap
 //   - 68: 2023-08-09: Client has dedicated updateRoutine; MapRequest.Stream true means ignore Hostinfo+Endpoints
 //   - 69: 2023-08-16: removed Debug.LogHeap* + GoroutineDumpURL; added c2n /debug/logheap
@@ -126,7 +126,9 @@ type CapabilityVersion int
 //   - 83: 2023-12-18: Client understands DefaultAutoUpdate
 //   - 84: 2024-01-04: Client understands SeamlessKeyRenewal
 //   - 85: 2024-01-05: Client understands MaxKeyDuration
-const CurrentCapabilityVersion CapabilityVersion = 85
+//   - 86: 2024-01-23: Client understands NodeAttrProbeUDPLifetime
+//   - 87: 2024-02-11: UserProfile.Groups removed (added in 66)
+const CurrentCapabilityVersion CapabilityVersion = 87
 
 type StableID string
 
@@ -197,13 +199,6 @@ type UserProfile struct {
 	// Roles exists for legacy reasons, to keep old macOS clients
 	// happy. It JSON marshals as [].
 	Roles emptyStructJSONSlice
-
-	// Groups contains group identifiers for any group that this user is
-	// a part of and that the coordination server is configured to tell
-	// your node about. (Thus, it may be empty or incomplete.)
-	// There's no semantic difference between a nil and an empty list.
-	// The list is always sorted.
-	Groups []string `json:",omitempty"`
 }
 
 func (p *UserProfile) Equal(p2 *UserProfile) bool {
@@ -216,8 +211,7 @@ func (p *UserProfile) Equal(p2 *UserProfile) bool {
 	return p.ID == p2.ID &&
 		p.LoginName == p2.LoginName &&
 		p.DisplayName == p2.DisplayName &&
-		p.ProfilePicURL == p2.ProfilePicURL &&
-		(len(p.Groups) == 0 && len(p2.Groups) == 0 || reflect.DeepEqual(p.Groups, p2.Groups))
+		p.ProfilePicURL == p2.ProfilePicURL
 }
 
 type emptyStructJSONSlice struct{}
@@ -474,7 +468,7 @@ func (n *Node) IsTagged() bool {
 
 // SharerOrUser Sharer if set, else User.
 func (n *Node) SharerOrUser() UserID {
-	return cmpx.Or(n.Sharer, n.User)
+	return cmp.Or(n.Sharer, n.User)
 }
 
 // IsTagged reports whether the node has any tags.
@@ -1344,6 +1338,8 @@ const (
 	// PeerCapabilityWebUI grants the ability for a peer to edit features from the
 	// device Web UI.
 	PeerCapabilityWebUI PeerCapability = "tailscale.com/cap/webui"
+	// PeerCapabilityTailFS grants the ability for a peer to access tailfs shares.
+	PeerCapabilityTailFS PeerCapability = "tailscale.com/cap/tailfs"
 )
 
 // NodeCapMap is a map of capabilities to their optional values. It is valid for
@@ -2086,7 +2082,7 @@ const (
 	CapabilitySSHRuleIn          NodeCapability = "https://tailscale.com/cap/ssh-rule-in"           // some SSH rule reach this node
 	CapabilityDataPlaneAuditLogs NodeCapability = "https://tailscale.com/cap/data-plane-audit-logs" // feature enabled
 	CapabilityDebug              NodeCapability = "https://tailscale.com/cap/debug"                 // exposes debug endpoints over the PeerAPI
-	CapabilityHTTPS              NodeCapability = "https"                                           // https cert provisioning enabled on tailnet
+	CapabilityHTTPS              NodeCapability = "https"
 
 	// CapabilityBindToInterfaceByRoute changes how Darwin nodes create
 	// sockets (in the net/netns package). See that package for more
@@ -2203,6 +2199,16 @@ const (
 	// NodeAttrSeamlessKeyRenewal makes clients enable beta functionality
 	// of renewing node keys without breaking connections.
 	NodeAttrSeamlessKeyRenewal NodeCapability = "seamless-key-renewal"
+
+	// NodeAttrProbeUDPLifetime makes the client probe UDP path lifetime at the
+	// tail end of an active direct connection in magicsock.
+	NodeAttrProbeUDPLifetime NodeCapability = "probe-udp-lifetime"
+
+	// NodeAttrsTailFSShare enables sharing via TailFS.
+	NodeAttrsTailFSShare NodeCapability = "tailfs:share"
+
+	// NodeAttrsTailFSAccess enables accessing shares via TailFS.
+	NodeAttrsTailFSAccess NodeCapability = "tailfs:access"
 )
 
 // SetDNSRequest is a request to add a DNS record.

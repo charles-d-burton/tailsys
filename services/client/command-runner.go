@@ -9,8 +9,8 @@ import (
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/services"
-	"google.golang.org/grpc"
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -24,6 +24,7 @@ func NewClient(ctx context.Context) (*Client, error) {
 }
 
 func (cli *Client) StartRPCClientMode(ctx context.Context) error {
+  fmt.Println("starting grpc client server")
 	pb.RegisterPingerServer(cli.GRPCServer, &services.Pinger{})
 	pb.RegisterCommandRunnerServer(cli.GRPCServer, &CommandServer{})
 	return cli.GRPCServer.Serve(cli.Listener)
@@ -32,6 +33,7 @@ func (cli *Client) StartRPCClientMode(ctx context.Context) error {
 
 func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr string) error {
 	for i := 0; i < 5; i++ {
+    fmt.Println("coordination server address: ", addr)
 		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return err

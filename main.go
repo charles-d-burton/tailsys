@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	err := cmd.StartCLI()
+	err := cmd.Start()
 	if err != nil {
 		log.Fatal(err)
 	}
