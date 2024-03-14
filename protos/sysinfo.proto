@@ -32,6 +32,7 @@ message NodeRegistrationRequest {
   SysInfo info = 1;
   Key key = 2;
   SystemType systemType = 3;
+  bool accepted = 4;
 }
 
 message NodeRegistrationResponse {

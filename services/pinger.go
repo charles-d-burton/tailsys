@@ -11,7 +11,8 @@ import (
 
 type Pinger struct {
 	pb.UnimplementedPingerServer
-  DB *nutsdb.DB
+	DB *nutsdb.DB
+	ID string
 }
 
 // Ping GRPC service for the service to ping clients and provide response time

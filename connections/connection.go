@@ -203,7 +203,7 @@ func (tn *Tailnet) createRPCServer(srv *tsnet.Server) error {
 		return err
 	}
 
-  //TODO: I need to pass a listener port to this 
+	//TODO: I need to pass a listener port to this
 	ln, err := srv.Listen("tcp", ":6655")
 	if err != nil {
 		return err

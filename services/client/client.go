@@ -16,7 +16,7 @@ const coordinationBucket = "coordination-server"
 type Client struct {
 	connections.Tailnet
 	services.DataManagement
-  ID string
+	ID string
 }
 
 type Option func(cl *Client) error
@@ -32,7 +32,7 @@ func (cl *Client) NewClient(ctx context.Context, opts ...Option) error {
 	if cl.DB == nil {
 		return errors.New("datastore not initialized")
 	}
-  cl.ID = uuid.NewString()
+	cl.ID = uuid.NewString()
 	return nil
 }
 
@@ -44,7 +44,10 @@ func (cl *Client) WithDataDir(dir string) Option {
 
 func (cli *Client) StartRPCClientMode(ctx context.Context) error {
 	fmt.Println("starting grpc client server")
-	pb.RegisterPingerServer(cli.GRPCServer, &services.Pinger{})
+	pb.RegisterPingerServer(cli.GRPCServer, &services.Pinger{
+		DB: cli.DB,
+		ID: cli.ID,
+	})
 	pb.RegisterCommandRunnerServer(cli.GRPCServer, &CommandServer{})
 	return cli.GRPCServer.Serve(cli.Listener)
 }
