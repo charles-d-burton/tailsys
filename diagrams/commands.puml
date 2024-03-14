@@ -1,0 +1,261 @@
+@startuml
+namespace commands {
+    class CommandRequest << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Requested *timestamp.Timestamp
+        + Command string
+        + Key *Key
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetRequested() *timestamp.Timestamp
+        + GetCommand() string
+        + GetKey() *Key
+
+    }
+    class CommandResonse << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Ran *timestamp.Timestamp
+        + Successful bool
+        + Output []byte
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetRan() *timestamp.Timestamp
+        + GetSuccessful() bool
+        + GetOutput() []byte
+
+    }
+    interface CommandRunnerClient  {
+        + Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResonse, error)
+
+    }
+    interface CommandRunnerServer  {
+        - mustEmbedUnimplementedCommandRunnerServer() 
+
+        + Command( context.Context,  *CommandRequest) (*CommandResonse, error)
+
+    }
+    class Key << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Key string
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetKey() string
+
+    }
+    class NodeRegistrationRequest << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Info *SysInfo
+        + Key *Key
+        + SystemType SystemType
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetInfo() *SysInfo
+        + GetKey() *Key
+        + GetSystemType() SystemType
+
+    }
+    class NodeRegistrationResponse << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Accepted bool
+        + Key *Key
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetAccepted() bool
+        + GetKey() *Key
+
+    }
+    class OSType << (S,Aquamarine) >> {
+        + Enum() *OSType
+        + String() string
+        + Descriptor() protoreflect.EnumDescriptor
+        + Type() protoreflect.EnumType
+        + Number() protoreflect.EnumNumber
+        + EnumDescriptor() ([]byte, []int)
+
+    }
+    class PingRequest << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Ping *timestamp.Timestamp
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetPing() *timestamp.Timestamp
+
+    }
+    interface PingerClient  {
+        + Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
+
+    }
+    interface PingerServer  {
+        - mustEmbedUnimplementedPingerServer() 
+
+        + Ping( context.Context,  *PingRequest) (*PongResponse, error)
+
+    }
+    class PongResponse << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Ping *timestamp.Timestamp
+        + InboundLatency float32
+        + Key *Key
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetPing() *timestamp.Timestamp
+        + GetInboundLatency() float32
+        + GetKey() *Key
+
+    }
+    interface RegistrationClient  {
+        + Register(ctx context.Context, in *NodeRegistrationRequest, opts ...grpc.CallOption) (*NodeRegistrationResponse, error)
+
+    }
+    interface RegistrationServer  {
+        - mustEmbedUnimplementedRegistrationServer() 
+
+        + Register( context.Context,  *NodeRegistrationRequest) (*NodeRegistrationResponse, error)
+
+    }
+    class SysInfo << (S,Aquamarine) >> {
+        - state protoimpl.MessageState
+        - sizeCache protoimpl.SizeCache
+        - unknownFields protoimpl.UnknownFields
+
+        + Hostname string
+        + Type OSType
+        + Ip string
+        + LastSeen *timestamp.Timestamp
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + ProtoReflect() protoreflect.Message
+        + Descriptor() ([]byte, []int)
+        + GetHostname() string
+        + GetType() OSType
+        + GetIp() string
+        + GetLastSeen() *timestamp.Timestamp
+
+    }
+    class SystemType << (S,Aquamarine) >> {
+        + Enum() *SystemType
+        + String() string
+        + Descriptor() protoreflect.EnumDescriptor
+        + Type() protoreflect.EnumType
+        + Number() protoreflect.EnumNumber
+        + EnumDescriptor() ([]byte, []int)
+
+    }
+    class UnimplementedCommandRunnerServer << (S,Aquamarine) >> {
+        - mustEmbedUnimplementedCommandRunnerServer() 
+
+        + Command( context.Context,  *CommandRequest) (*CommandResonse, error)
+
+    }
+    class UnimplementedPingerServer << (S,Aquamarine) >> {
+        - mustEmbedUnimplementedPingerServer() 
+
+        + Ping( context.Context,  *PingRequest) (*PongResponse, error)
+
+    }
+    class UnimplementedRegistrationServer << (S,Aquamarine) >> {
+        - mustEmbedUnimplementedRegistrationServer() 
+
+        + Register( context.Context,  *NodeRegistrationRequest) (*NodeRegistrationResponse, error)
+
+    }
+    interface UnsafeCommandRunnerServer  {
+        - mustEmbedUnimplementedCommandRunnerServer() 
+
+    }
+    interface UnsafePingerServer  {
+        - mustEmbedUnimplementedPingerServer() 
+
+    }
+    interface UnsafeRegistrationServer  {
+        - mustEmbedUnimplementedRegistrationServer() 
+
+    }
+    class commandRunnerClient << (S,Aquamarine) >> {
+        - cc grpc.ClientConnInterface
+
+        + Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResonse, error)
+
+    }
+    class commands.OSType << (T, #FF7700) >>  {
+    }
+    class commands.SystemType << (T, #FF7700) >>  {
+    }
+    class pingerClient << (S,Aquamarine) >> {
+        - cc grpc.ClientConnInterface
+
+        + Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
+
+    }
+    class registrationClient << (S,Aquamarine) >> {
+        - cc grpc.ClientConnInterface
+
+        + Register(ctx context.Context, in *NodeRegistrationRequest, opts ...grpc.CallOption) (*NodeRegistrationResponse, error)
+
+    }
+}
+
+"commands.CommandRunnerServer" <|-- "commands.UnimplementedCommandRunnerServer"
+"commands.UnsafeCommandRunnerServer" <|-- "commands.UnimplementedCommandRunnerServer"
+"commands.PingerServer" <|-- "commands.UnimplementedPingerServer"
+"commands.UnsafePingerServer" <|-- "commands.UnimplementedPingerServer"
+"commands.RegistrationServer" <|-- "commands.UnimplementedRegistrationServer"
+"commands.UnsafeRegistrationServer" <|-- "commands.UnimplementedRegistrationServer"
+"commands.CommandRunnerClient" <|-- "commands.commandRunnerClient"
+"commands.PingerClient" <|-- "commands.pingerClient"
+"commands.RegistrationClient" <|-- "commands.registrationClient"
+
+"__builtin__.int32" #.. "commands.OSType"
+"__builtin__.int32" #.. "commands.SystemType"
+@enduml

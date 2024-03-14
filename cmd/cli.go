@@ -4,46 +4,47 @@ import (
 	"context"
 	"fmt"
 	"os"
-  "strings"
 	"path/filepath"
+	"strings"
 
 	"github.com/charles-d-burton/tailsys/services/client"
 	"github.com/charles-d-burton/tailsys/services/coordination"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 // Enum type for Auth Type
 type AuthType int
+
 // Enum definition for Auth Type
 const (
 	OAUTH AuthType = iota
 	AUTHKEY
-  NONE
+	NONE
 )
 
 func initConfig(cmd *cobra.Command) error {
-  v := viper.New()
-  if Check() {
-    v.SetConfigFile("/var/lib/tailsys/config")
-  } else {
-    //find the home directory
-    home, err := os.UserHomeDir()
-    cobra.CheckErr(err)
+	v := viper.New()
+	if Check() {
+		v.SetConfigFile("/var/lib/tailsys/config")
+	} else {
+		//find the home directory
+		home, err := os.UserHomeDir()
+		cobra.CheckErr(err)
 
-    v.AddConfigPath(filepath.Join(home, ".local", "tailsys"))
-    v.SetConfigType("yaml")
-    v.SetConfigName("tailsys")
-  }
+		v.AddConfigPath(filepath.Join(home, ".local", "tailsys"))
+		v.SetConfigType("yaml")
+		v.SetConfigName("tailsys")
+	}
 
-  if err := v.ReadInConfig(); err == nil {
-    //It's ok if there's no config file
-    if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-      return err
-    }
-  }
-  // When we bind flags to environment variables expect that the
+	if err := v.ReadInConfig(); err == nil {
+		//It's ok if there's no config file
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return err
+		}
+	}
+	// When we bind flags to environment variables expect that the
 	// environment variables are prefixed, e.g. a flag like --number
 	// binds to an environment variable STING_NUMBER. This helps
 	// avoid conflicts.
@@ -58,13 +59,13 @@ func initConfig(cmd *cobra.Command) error {
 	// like --favorite-color which we fix in the bindFlags function
 	v.AutomaticEnv()
 
-  bindFlags(cmd, v)
-  return nil
+	bindFlags(cmd, v)
+	return nil
 }
 
 // Bind each cobra flag to its associated viper configuration (config file and environment variable)
 func bindFlags(cmd *cobra.Command, v *viper.Viper) {
-    cmd.Flags().VisitAll(func(f *pflag.Flag) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		// Determine the naming convention of the flags when represented in the config file
 		configName := f.Name
 
@@ -83,12 +84,13 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 }
 
 type GlobalFlags struct {
-  ClientId string
-  ClientSecret string
-  AuthKey string
-  Port string
-  Hostname string
-  Verbose bool
+	ClientId      string
+	ClientSecret  string
+	AuthKey       string
+	Port          string
+	Hostname      string
+	Verbose       bool
+	DataDirectory string
 }
 
 func (gf *GlobalFlags) GetAuthType() AuthType {
@@ -106,69 +108,71 @@ func (gf *GlobalFlags) GetAuthType() AuthType {
 var gf = GlobalFlags{}
 
 func Start() error {
-  return rootCommand().Execute()
+	return rootCommand().Execute()
 }
 
 func rootCommand() *cobra.Command {
-  rootCmd := &cobra.Command {
-    Use: "tailsys",
-    Short: "A configuration manager built for Tailscale",
-    PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-      return initConfig(cmd)
-    },
-  }
-  rootCmd.PersistentFlags().StringVar(&gf.ClientId, "client-id","", "Oauth client id")
-  viper.BindPFlag("client-id", rootCmd.PersistentFlags().Lookup("client-id"))
-  rootCmd.PersistentFlags().StringVar(&gf.ClientSecret, "client-secret","", "Oauth client client secret")
-  viper.BindPFlag("client-secret", rootCmd.PersistentFlags().Lookup("client-secret"))
-  rootCmd.MarkFlagsRequiredTogether("client-id", "client-secret")
+	rootCmd := &cobra.Command{
+		Use:   "tailsys",
+		Short: "A configuration manager built for Tailscale",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return initConfig(cmd)
+		},
+	}
+	rootCmd.PersistentFlags().StringVar(&gf.ClientId, "client-id", "", "Oauth client id")
+	viper.BindPFlag("client-id", rootCmd.PersistentFlags().Lookup("client-id"))
+	rootCmd.PersistentFlags().StringVar(&gf.ClientSecret, "client-secret", "", "Oauth client client secret")
+	viper.BindPFlag("client-secret", rootCmd.PersistentFlags().Lookup("client-secret"))
+	rootCmd.MarkFlagsRequiredTogether("client-id", "client-secret")
 
-  rootCmd.PersistentFlags().StringVar(&gf.AuthKey, "auth-key", "", "Pre-generated tailscale auth key")
-  viper.BindPFlag("auth-key", rootCmd.PersistentFlags().Lookup("auth-key"))
-  rootCmd.PersistentFlags().StringVarP(&gf.Port, "port", "p", "6655", "gRPC Port to listen on")
-  viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
-  rootCmd.PersistentFlags().StringVar(&gf.Hostname, "hostname", "",  "Override hostname")
-  viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
-  rootCmd.PersistentFlags().BoolVarP(&gf.Verbose, "verbose", "v", false, "Verbose logging")
+	rootCmd.PersistentFlags().StringVar(&gf.AuthKey, "auth-key", "", "Pre-generated tailscale auth key")
+	viper.BindPFlag("auth-key", rootCmd.PersistentFlags().Lookup("auth-key"))
+	rootCmd.PersistentFlags().StringVarP(&gf.Port, "port", "p", "6655", "gRPC Port to listen on")
+	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
+	rootCmd.PersistentFlags().StringVar(&gf.Hostname, "hostname", "", "Override hostname")
+	viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
+	rootCmd.PersistentFlags().StringVar(&gf.DataDirectory, "data-directory", getDataDirectory(), "Set the location for the data store")
+	viper.BindPFlag("data-directory", rootCmd.PersistentFlags().Lookup("data-directory"))
 
+	rootCmd.PersistentFlags().BoolVarP(&gf.Verbose, "verbose", "v", false, "Verbose logging")
 
-  rootCmd.AddCommand(coodinationServerCommand())
-  rootCmd.AddCommand(clientCommand())
-  rootCmd.AddCommand(interactiveCommand())
-  rootCmd.AddCommand(noninteractiveCommand())
+	rootCmd.AddCommand(coodinationServerCommand())
+	rootCmd.AddCommand(clientCommand())
+	rootCmd.AddCommand(interactiveCommand())
+	rootCmd.AddCommand(noninteractiveCommand())
 
-  return rootCmd
+	return rootCmd
 }
 
 type coFlags struct {
-  DevMode bool
-  DataDirectory string
+	DevMode bool
 }
 
 var cof = coFlags{}
 
 func coodinationServerCommand() *cobra.Command {
-  ccmd := &cobra.Command {
-    Use: "coordination-server",
+	ccmd := &cobra.Command{
+		Use:     "coordination-server",
 		Aliases: []string{"co"},
-    Short: "Start the application coordination server",
-    RunE: func(ccmd *cobra.Command, args []string) error {
+		Short:   "Start the application coordination server",
+		RunE: func(ccmd *cobra.Command, args []string) error {
 			fmt.Println("starting the server code")
-			var co coordination.Coordinator
-      fmt.Println("dev-mode: ", cof.DevMode)
-      fmt.Println("data-dir: ", cof.DataDirectory)
 
-      ctx := context.Background()
+			var co coordination.Coordinator
+			fmt.Println("dev-mode: ", cof.DevMode)
+			fmt.Println("data-dir: ", gf.DataDirectory)
+
+			ctx := context.Background()
 			err := co.NewCoordinator(ctx,
 				co.WithDevMode(cof.DevMode),
-        co.WithDataDir(cof.DataDirectory),
+				co.WithDataDir(gf.DataDirectory),
 			)
 
-      if err != nil {
-        return err
-      }
+			if err != nil {
+				return err
+			}
 
-      authType := gf.GetAuthType()
+			authType := gf.GetAuthType()
 
 			hostname := gf.Hostname
 			switch authType {
@@ -183,54 +187,44 @@ func coodinationServerCommand() *cobra.Command {
 				if err := co.ConnectAuthKey(ctx, authkey, hostname); err != nil {
 					return err
 				}
-      case NONE:
-        //TODO: Implement plain non-tailnet mode
-        fmt.Println("Not yet implemented")
+			case NONE:
+				//TODO: Implement plain non-tailnet mode
+				fmt.Println("Not yet implemented")
 			}
 			return co.StartRPCCoordinationServer(ctx)
 
-    },
-  }
-  ddir := ""
-  if Check() {
-    ddir = "/var/lib/tailsys/db"
-  } else {
-    home, err := os.UserHomeDir()
-    if err != nil {
-      cobra.CheckErr(err)
-    }
-    ddir = filepath.Join(home, ".local", "tailsys", "db")
-  }
-  ccmd.Flags().BoolVar(&cof.DevMode, "dev", false, "Enable dev mode, accept all incoming keys")
-  ccmd.Flags().StringVar(&cof.DataDirectory, "data-directory", ddir, "Enable dev mode, accept all incoming keys")
+		},
+	}
+	ccmd.Flags().BoolVar(&cof.DevMode, "dev", false, "Enable dev mode, accept all incoming keys")
 
-  return ccmd
+	return ccmd
 }
 
 type clientFlags struct {
-  DiscoveryTags string
-  CoordinationServer string
+	DiscoveryTags      string
+	CoordinationServer string
 }
 
 var cif = clientFlags{}
 
 func clientCommand() *cobra.Command {
-  ccmd := &cobra.Command {
-    Use: "client", 
+	ccmd := &cobra.Command{
+		Use:     "client",
 		Aliases: []string{"cl"},
-    Short: "Start the application in client mode",
-    RunE: func(ccmd *cobra.Command, args []string) error {
+		Short:   "Start the application in client mode",
+		RunE: func(ccmd *cobra.Command, args []string) error {
 			fmt.Println("starting the client code")
-      ctx := context.Background()
+			ctx := context.Background()
 
-			cl, err := client.NewClient(ctx)
-      if err != nil {
-        return err
-      }
+			var cl client.Client
+			err := cl.NewClient(ctx, cl.WithDataDir(gf.DataDirectory))
+			if err != nil {
+				return err
+			}
 
 			hostname := gf.Hostname
 			coServer := cif.CoordinationServer
-      authType := gf.GetAuthType()
+			authType := gf.GetAuthType()
 
 			switch authType {
 			case OAUTH:
@@ -245,40 +239,54 @@ func clientCommand() *cobra.Command {
 					return err
 				}
 			}
-      fmt.Println("connected to tailnet, registering with coordination server")
+			fmt.Println("connected to tailnet, registering with coordination server")
 			if err := cl.RegisterWithCoordinationServer(ctx, coServer); err != nil {
 				return err
 			}
-      fmt.Println("registered, starting client operations")
+			fmt.Println("registered, starting client operations")
 			return cl.StartRPCClientMode(ctx)
 
-    },
-  }
-  ccmd.Flags().StringVar(&cif.CoordinationServer, "coordination-server", "", "Hostname of the coordination server")
-  ccmd.Flags().StringVar(&cif.DiscoveryTags, "discover-tags", "", "Tailnet tags to filter and discover hosts")
-  return ccmd
+		},
+	}
+	ccmd.Flags().StringVar(&cif.CoordinationServer, "coordination-server", "", "Hostname of the coordination server")
+	ccmd.Flags().StringVar(&cif.DiscoveryTags, "discover-tags", "", "Tailnet tags to filter and discover hosts")
+	return ccmd
 }
 
 func interactiveCommand() *cobra.Command {
-  ccmd := &cobra.Command {
-    Use: "interactive",
+	ccmd := &cobra.Command{
+		Use:     "interactive",
 		Aliases: []string{"i"},
-    Short: "Start the application interactive ui",
-    Run: func(ccmd *cobra.Command, args []string) {
+		Short:   "Start the application interactive ui",
+		Run: func(ccmd *cobra.Command, args []string) {
 
-    },
-  }
-  return ccmd
+		},
+	}
+	return ccmd
 }
 
 func noninteractiveCommand() *cobra.Command {
-  ccmd := &cobra.Command {
-    Use: "non-interactive",
+	ccmd := &cobra.Command{
+		Use:     "non-interactive",
 		Aliases: []string{"ni"},
-    Short: "Start the command non-interactively",
-    Run: func(ccmd *cobra.Command, args []string) {
+		Short:   "Start the command non-interactively",
+		Run: func(ccmd *cobra.Command, args []string) {
 			fmt.Println("starting the interactive code")
-    },
-  }
-  return ccmd
+		},
+	}
+	return ccmd
+}
+
+func getDataDirectory() string {
+	ddir := ""
+	if Check() {
+		ddir = "/var/lib/tailsys/db"
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			cobra.CheckErr(err)
+		}
+		ddir = filepath.Join(home, ".local", "tailsys", "db")
+	}
+	return ddir
 }

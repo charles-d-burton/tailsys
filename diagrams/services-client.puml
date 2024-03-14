@@ -1,0 +1,17 @@
+@startuml
+namespace client {
+    class Client << (S,Aquamarine) >> {
+        + StartRPCClientMode(ctx context.Context) error
+        + RegisterWithCoordinationServer(ctx context.Context, addr string) error
+
+    }
+    class CommandServer << (S,Aquamarine) >> {
+        + RegisterCommandRunner(ctx context.Context, in *commands.CommandRequest) (*commands.CommandResonse, error)
+
+    }
+}
+"connections.Tailnet" *-- "client.Client"
+"commands.UnimplementedCommandRunnerServer" *-- "client.CommandServer"
+
+
+@enduml

@@ -15,7 +15,28 @@ namespace client {
 
 
 namespace cmd {
+    class GlobalFlags << (S,Aquamarine) >> {
+        + ClientId string
+        + ClientSecret string
+        + AuthKey string
+        + Port string
+        + Hostname string
+        + Verbose bool
+
+        + GetAuthType() AuthType
+
+    }
+    class clientFlags << (S,Aquamarine) >> {
+        + DiscoveryTags string
+        + CoordinationServer string
+
+    }
     class cmd.AuthType << (T, #FF7700) >>  {
+    }
+    class coFlags << (S,Aquamarine) >> {
+        + DevMode bool
+        + DataDirectory string
+
     }
 }
 
@@ -316,14 +337,20 @@ namespace coordination {
     class Coordinator << (S,Aquamarine) >> {
         - devMode bool
 
+        + DB *nutsdb.DB
+
         + NewCoordinator(ctx context.Context, opts ...Option) error
         + WithDevMode(mode bool) Option
+        + WithDataDir(dir string) Option
         + StartRPCCoordinationServer(ctx context.Context) error
 
     }
     class RegistrationServer << (S,Aquamarine) >> {
         + DevMode bool
         + ID string
+        + DB *nutsdb.DB
+
+        - createRegistration(ctx context.Context, nrr *commands.NodeRegistrationRequest) error
 
         + Register(ctx context.Context, in *commands.NodeRegistrationRequest) (*commands.NodeRegistrationResponse, error)
 
@@ -333,15 +360,6 @@ namespace coordination {
 }
 "connections.Tailnet" *-- "coordination.Coordinator"
 "commands.UnimplementedRegistrationServer" *-- "coordination.RegistrationServer"
-
-
-namespace services {
-    class Pinger << (S,Aquamarine) >> {
-        + Ping(ctx context.Context, in *commands.PingRequest) (*commands.PongResponse, error)
-
-    }
-}
-"commands.UnimplementedPingerServer" *-- "services.Pinger"
 
 
 "__builtin__.int" #.. "cmd.AuthType"

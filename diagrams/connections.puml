@@ -1,0 +1,38 @@
+@startuml
+namespace connections {
+    class Tailnet << (S,Aquamarine) >> {
+        + ClientID string
+        + ClientSecret string
+        + AuthKey string
+        + Hostname string
+        + Addr string
+        + Scopes []string
+        + Tags []string
+        + Client *tailscale.Client
+        + GRPCServer *grpc.Server
+        + Listener net.Listener
+        + TailnetLogging bool
+
+        - reapDeviceID(ctx context.Context) error
+        - createRPCServer(srv *tsnet.Server) error
+
+        + ConnectOauth(ctx context.Context, id string, secret string, hostname string) error
+        + ConnectAuthKey(ctx context.Context, authKey string, hostname string) error
+        + NewConnection(ctx context.Context, opts ...Option) (*tsnet.Server, error)
+        + InitClient(ctx context.Context) error
+        + GetDevices(ctx context.Context) ([]tailscale.Device, error)
+        + WithOauth(clientId string, clientSecret string) Option
+        + WithAuthKey(key string) Option
+        + WithScopes(scopes ...string) Option
+        + WithTags(tags ...string) Option
+        + WithHostname(hostname string) Option
+        + WithTailnetLogging(enabled bool) Option
+
+    }
+    class connections.Option << (T, #FF7700) >>  {
+    }
+}
+
+
+"connections.<font color=blue>func</font>(*Tailnet) error" #.. "connections.Option"
+@enduml

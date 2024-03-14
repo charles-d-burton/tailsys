@@ -15,7 +15,7 @@ func Check() bool {
 		windows.DOMAIN_ALIAS_RID_ADMINS,
 		0, 0, 0, 0, 0, 0,
 		&sid,
-  )
+	)
 
 	admin, _ := windows.Token(0).IsMember(sid)
 	return admin

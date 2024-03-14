@@ -3,9 +3,9 @@
 
 package cmd
 
-import "os" 
+import "os"
 
-//Check if admin
+// Check if admin
 func Check() bool {
-  return os.Getuid() == 0
+	return os.Getuid() == 0
 }

@@ -5,70 +5,20 @@ import (
 	"fmt"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
-	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/services"
+	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/nutsdb/nutsdb"
 )
 
-//Coordinator holds the runtime variables for the coordination server
-type Coordinator struct {
-	connections.Tailnet
-	devMode bool
-	DB      *nutsdb.DB
-}
-
-//Options defines the configuration options function for configuration injection
-type Option func(co *Coordinator) error
-
-//NewCoordinator Create a new coordinator instance and set the provided options
-func (co *Coordinator) NewCoordinator(ctx context.Context, opts ...Option) error {
-
-	for _, opt := range opts {
-		err := opt(co)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-//WithDevMode enable the server to run in dev mode
-func (co *Coordinator) WithDevMode(mode bool) Option {
-	return func(co *Coordinator) error {
-    fmt.Println("setting dev mode to: ", mode)
-		co.devMode = mode
-		return nil
-	}
-}
-
-//WithDataDir set the location for the database to be stored
-func (co *Coordinator) WithDataDir(dir string) Option {
-	return func(co *Coordinator) error {
-    fmt.Println("creating database at: ", dir)
-    // if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-    //   return err
-    // }
-		db, err := nutsdb.Open(
-			nutsdb.DefaultOptions,
-			nutsdb.WithDir(dir),
-		)
-		if err != nil {
-			return err
-		}
-		co.DB = db
-    fmt.Println("database is created an online")
-		return nil
-	}
-}
-
-//StartRPCCoordinationServer Register the gRPC server endpoints and start the server
+// StartRPCCoordinationServer Register the gRPC server endpoints and start the server
 func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
 	pb.RegisterPingerServer(co.GRPCServer, &services.Pinger{})
 	pb.RegisterRegistrationServer(co.GRPCServer, &RegistrationServer{
 		DevMode: co.devMode,
 		DB:      co.DB,
 	})
+	fmt.Println("rpc server starting to serve traffic")
 	return co.GRPCServer.Serve(co.Listener)
 }
 
@@ -80,18 +30,37 @@ type RegistrationServer struct {
 	DB      *nutsdb.DB
 }
 
-func (r *RegistrationServer) createRegistration(ctx context.Context, nrr *pb.NodeRegistrationRequest) error {
-  bucket := nrr.Key.GetKey()
-  fmt.Printf("registering %s", bucket)
-  return r.DB.Update(func (tx *nutsdb.Tx)error {
-    if !tx.ExistBucket(nutsdb.DataStructureBTree, bucket) {
-      fmt.Println("bucket does not exist, creating bucket for node")
-      return tx.NewBucket(nutsdb.DataStructureBTree, bucket)
+func (r *RegistrationServer) createRegistration(nrr *pb.NodeRegistrationRequest) error {
+	clientKey := nrr.Key.GetKey()
+	fmt.Printf("registering %s\n", clientKey)
+  err := r.DB.Update(func (tx *nutsdb.Tx) error {
+		if !tx.ExistBucket(nutsdb.DataStructureBTree, registrationBucket) {
+			fmt.Println("recording registration status")
+			return tx.NewBucket(nutsdb.DataStructureBTree, registrationBucket)
     }
-    fmt.Println("bucket exists, returning to caller")
     return nil
   })
-} 
+
+  if err != nil {
+    fmt.Println("could not create bucket")
+    return err
+  }
+
+  return r.DB.Update(func (tx *nutsdb.Tx) error {
+		data, err := proto.Marshal(nrr)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("recording request")
+		err = tx.Put(registrationBucket, []byte(clientKey), data, 0)
+		if err != nil {
+      fmt.Println("could not put record")
+			return err
+		}
+    return nil
+  })
+}
 
 // Register registers a node with the database when a node sends a request.  Returns the server id so the node can verify further requests
 func (r *RegistrationServer) Register(ctx context.Context, in *pb.NodeRegistrationRequest) (*pb.NodeRegistrationResponse, error) {
@@ -101,9 +70,9 @@ func (r *RegistrationServer) Register(ctx context.Context, in *pb.NodeRegistrati
 
 		id := uuid.New()
 		fmt.Println("running in dev mode, accepting all incoming connections")
-    if err := r.createRegistration(ctx, in); err != nil {
-      return nil, err
-    }
+		if err := r.createRegistration(in); err != nil {
+			return nil, err
+		}
 
 		return &pb.NodeRegistrationResponse{
 			Accepted: true,
@@ -111,10 +80,10 @@ func (r *RegistrationServer) Register(ctx context.Context, in *pb.NodeRegistrati
 		}, nil
 	}
 
-  if err := r.createRegistration(ctx, in); err != nil {
-    return nil, err
-  }
-  
+	if err := r.createRegistration(in); err != nil {
+		return nil, err
+	}
+
 	return &pb.NodeRegistrationResponse{
 		Accepted: false,
 		Key:      &pb.Key{Key: "coordination-server-key"},

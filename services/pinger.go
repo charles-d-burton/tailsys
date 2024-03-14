@@ -5,11 +5,13 @@ import (
 	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
+	"github.com/nutsdb/nutsdb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Pinger struct {
 	pb.UnimplementedPingerServer
+  DB *nutsdb.DB
 }
 
 // Ping GRPC service for the service to ping clients and provide response time

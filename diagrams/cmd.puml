@@ -1,0 +1,30 @@
+@startuml
+namespace cmd {
+    class GlobalFlags << (S,Aquamarine) >> {
+        + ClientId string
+        + ClientSecret string
+        + AuthKey string
+        + Port string
+        + Hostname string
+        + Verbose bool
+
+        + GetAuthType() AuthType
+
+    }
+    class clientFlags << (S,Aquamarine) >> {
+        + DiscoveryTags string
+        + CoordinationServer string
+
+    }
+    class cmd.AuthType << (T, #FF7700) >>  {
+    }
+    class coFlags << (S,Aquamarine) >> {
+        + DevMode bool
+        + DataDirectory string
+
+    }
+}
+
+
+"__builtin__.int" #.. "cmd.AuthType"
+@enduml

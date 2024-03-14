@@ -1,0 +1,11 @@
+@startuml
+namespace services {
+    class Pinger << (S,Aquamarine) >> {
+        + Ping(ctx context.Context, in *commands.PingRequest) (*commands.PongResponse, error)
+
+    }
+}
+"commands.UnimplementedPingerServer" *-- "services.Pinger"
+
+
+@enduml

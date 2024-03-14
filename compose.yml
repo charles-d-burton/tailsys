@@ -12,17 +12,19 @@ services:
     command:
       - co
       
-  client:
-    build:
-      context: .
-      target: client
-    environment:
-      - TS_CLIENT_ID=${TS_CLIENT_ID}
-      - TS_CLIENT_SECRET=${TS_CLIENT_SECRET}
-      - TS_HOSTNAME=tailsys-client-test
-      - TS_COORDINATION_SERVER=tailsys-coordination-test:6655
-    command:
-      - client
+  # client:
+  #   build:
+  #     context: .
+  #     target: client
+  #   environment:
+  #     - TS_CLIENT_ID=${TS_CLIENT_ID}
+  #     - TS_CLIENT_SECRET=${TS_CLIENT_SECRET}
+  #     - TS_HOSTNAME=tailsys-client-test
+  #     - TS_COORDINATION_SERVER=tailsys-coordination-test:6655
+  #   command:
+  #     - client
+  #   depends_on:
+  #     - coordination
 
   # command-test:
   #   build:
