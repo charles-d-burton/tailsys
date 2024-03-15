@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/golang/protobuf/proto"
 	"github.com/nutsdb/nutsdb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -17,8 +19,14 @@ import (
 func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr string) error {
 	for i := 0; i < 5; i++ {
 		fmt.Println("coordination server address: ", addr)
-		// conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithBackoffMaxDelay(10*time.Second))
+    ctxTo, cancel := context.WithTimeout(ctx, time.Second * 2)
+    defer cancel()
+		conn, err := grpc.DialContext(ctxTo, addr, 
+      grpc.WithTransportCredentials(insecure.NewCredentials()), 
+      grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+        return cl.TSServer.Dial(ctx, "-", addr)
+      }),
+    )
 		if err != nil {
 			return err
 		}
@@ -28,6 +36,7 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 
 		fmt.Println("attempting to send registration request")
 		fmt.Println(conn.GetState())
+
 		req := &pb.NodeRegistrationRequest{
 			Info: &pb.SysInfo{
 				Hostname: cl.Hostname,

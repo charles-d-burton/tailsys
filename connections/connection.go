@@ -24,6 +24,7 @@ type Tailnet struct {
 	Scopes         []string
 	Tags           []string
 	Client         *tailscale.Client
+  TSServer       *tsnet.Server
 	GRPCServer     *grpc.Server
 	Listener       net.Listener
 	TailnetLogging bool
@@ -33,17 +34,17 @@ type Tailnet struct {
 type Option func(tn *Tailnet) error
 
 // NewConnection setup a connection to the tailnet
-func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Server, error) {
+func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) error {
 	for _, opt := range opts {
 		err := opt(tn)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	err := tn.InitClient(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	srv := &tsnet.Server{
@@ -53,8 +54,8 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) (*tsnet.Se
 		//TODO: this is erroring, I think it's a bug on the tailscale side
 		//    Logger: func(string, ...any) {},
 	}
-
-	return srv, nil
+  tn.TSServer = srv
+	return nil
 }
 
 func (tn *Tailnet) InitClient(ctx context.Context) error {
@@ -197,14 +198,14 @@ func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	}
 }
 
-func (tn *Tailnet) createRPCServer(srv *tsnet.Server) error {
+func (tn *Tailnet) createRPCServer() error {
 
-	if err := srv.Start(); err != nil {
+	if err := tn.TSServer.Start(); err != nil {
 		return err
 	}
 
 	//TODO: I need to pass a listener port to this
-	ln, err := srv.Listen("tcp", ":6655")
+	ln, err := tn.TSServer.Listen("tcp", ":6655")
 	if err != nil {
 		return err
 	}

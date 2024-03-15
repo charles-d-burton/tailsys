@@ -18,8 +18,9 @@ type RegistrationServer struct {
 }
 
 func (r *RegistrationServer) createRegistration(nrr *pb.NodeRegistrationRequest) error {
-	clientKey := nrr.Key.GetKey()
-	fmt.Printf("registering %s\n", clientKey)
+  clientName := nrr.GetInfo().Hostname
+	// clientKey := nrr.Key.GetKey()
+	fmt.Printf("registering %s\n", clientName)
 	err := r.DB.Update(func(tx *nutsdb.Tx) error {
 		if !tx.ExistBucket(nutsdb.DataStructureBTree, registrationBucket) {
 			fmt.Println("recording registration status")
@@ -40,7 +41,7 @@ func (r *RegistrationServer) createRegistration(nrr *pb.NodeRegistrationRequest)
 		}
 
 		fmt.Println("recording request")
-		err = tx.Put(registrationBucket, []byte(clientKey), data, 0)
+		err = tx.Put(registrationBucket, []byte(clientName), data, 0)
 		if err != nil {
 			fmt.Println("could not put record")
 			return err

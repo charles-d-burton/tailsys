@@ -42,12 +42,15 @@ func (cl *Client) WithDataDir(dir string) Option {
 	}
 }
 
-func (cli *Client) StartRPCClientMode(ctx context.Context) error {
+func (cl *Client) StartRPCClientMode(ctx context.Context) error {
 	fmt.Println("starting grpc client server")
-	pb.RegisterPingerServer(cli.GRPCServer, &services.Pinger{
-		DB: cli.DB,
-		ID: cli.ID,
+
+	pb.RegisterPingerServer(cl.GRPCServer, &services.Pinger{
+		DB: cl.DB,
+		ID: cl.ID,
 	})
-	pb.RegisterCommandRunnerServer(cli.GRPCServer, &CommandServer{})
-	return cli.GRPCServer.Serve(cli.Listener)
+  
+	pb.RegisterCommandRunnerServer(cl.GRPCServer, &CommandServer{})
+
+	return cl.GRPCServer.Serve(cl.Listener)
 }

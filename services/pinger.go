@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+  "fmt"
 	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
@@ -17,6 +18,7 @@ type Pinger struct {
 
 // Ping GRPC service for the service to ping clients and provide response time
 func (p *Pinger) Ping(ctx context.Context, in *pb.PingRequest) (*pb.PongResponse, error) {
+  fmt.Println("received ping request")
 	now := time.Now()
 	latency := now.Sub(in.Ping.AsTime())
 
@@ -25,3 +27,4 @@ func (p *Pinger) Ping(ctx context.Context, in *pb.PingRequest) (*pb.PongResponse
 		InboundLatency: float32(latency.Milliseconds()),
 	}, nil
 }
+
