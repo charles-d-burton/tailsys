@@ -11,8 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const coordinationBucket = "coordination-server"
-
 type Client struct {
 	connections.Tailnet
 	services.DataManagement
@@ -49,7 +47,7 @@ func (cl *Client) StartRPCClientMode(ctx context.Context) error {
 		DB: cl.DB,
 		ID: cl.ID,
 	})
-  
+
 	pb.RegisterCommandRunnerServer(cl.GRPCServer, &CommandServer{})
 
 	return cl.GRPCServer.Serve(cl.Listener)

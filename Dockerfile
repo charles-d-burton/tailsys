@@ -1,6 +1,6 @@
 FROM public.ecr.aws/docker/library/golang:alpine3.19 AS base
 
-RUN apk update && apk add --no-cache git
+RUN apk update && apk add --no-cache git gcc musl-dev
 WORKDIR /app
 
 COPY . .

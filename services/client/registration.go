@@ -8,8 +8,7 @@ import (
 	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
-	"github.com/golang/protobuf/proto"
-	"github.com/nutsdb/nutsdb"
+	"github.com/charles-d-burton/tailsys/data/queries"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,14 +18,14 @@ import (
 func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr string) error {
 	for i := 0; i < 5; i++ {
 		fmt.Println("coordination server address: ", addr)
-    ctxTo, cancel := context.WithTimeout(ctx, time.Second * 2)
-    defer cancel()
-		conn, err := grpc.DialContext(ctxTo, addr, 
-      grpc.WithTransportCredentials(insecure.NewCredentials()), 
-      grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-        return cl.TSServer.Dial(ctx, "-", addr)
-      }),
-    )
+		ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
+		defer cancel()
+		conn, err := grpc.DialContext(ctxTo, addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				return cl.TSServer.Dial(ctx, "-", addr)
+			}),
+		)
 		if err != nil {
 			return err
 		}
@@ -71,33 +70,11 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 }
 
 func (cl *Client) addRegistration(r *pb.NodeRegistrationResponse) error {
-	serverKey := r.Key.GetKey()
 	fmt.Println("registering server")
-
-	err := cl.DB.Update(func(tx *nutsdb.Tx) error {
-		if !tx.ExistBucket(nutsdb.DataStructureBTree, coordinationBucket) {
-			fmt.Println("recording registration status")
-			return tx.NewBucket(nutsdb.DataStructureBTree, coordinationBucket)
-		}
-		return nil
-	})
-
+	err := queries.SetRegisteredCoordinationServer(cl.DB, r.GetHostname(), r.GetKey().Key)
 	if err != nil {
-		fmt.Println("could not create bucket")
+		fmt.Println("could not register server")
 		return err
 	}
-
-	return cl.DB.Update(func(tx *nutsdb.Tx) error {
-		data, err := proto.Marshal(r)
-		if err != nil {
-			return err
-		}
-
-		err = tx.Put(coordinationBucket, []byte(serverKey), data, 0)
-		if err != nil {
-			fmt.Println("could not put record")
-			return err
-		}
-		return nil
-	})
+	return nil
 }

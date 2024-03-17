@@ -14,6 +14,16 @@ import (
 	"tailscale.com/tsnet"
 )
 
+// Enum type for Auth Type
+type AuthType int
+
+// Enum definition for Auth Type
+const (
+	OAUTH AuthType = iota
+	AUTHKEY
+	NONE
+)
+
 // Tailnet main struct to hold connection to the tailnet information
 type Tailnet struct {
 	ClientID       string
@@ -21,20 +31,22 @@ type Tailnet struct {
 	AuthKey        string
 	Hostname       string
 	Addr           string
+	Port           string
 	Scopes         []string
 	Tags           []string
 	Client         *tailscale.Client
-  TSServer       *tsnet.Server
+	TSServer       *tsnet.Server
 	GRPCServer     *grpc.Server
 	Listener       net.Listener
 	TailnetLogging bool
+	authType       AuthType
 }
 
 // Option function to set different options on the tailnet config
 type Option func(tn *Tailnet) error
 
-// NewConnection setup a connection to the tailnet
-func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) error {
+// connect to the tailnet using oauth credentials
+func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 	for _, opt := range opts {
 		err := opt(tn)
 		if err != nil {
@@ -42,7 +54,15 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) error {
 		}
 	}
 
-	err := tn.InitClient(ctx)
+	if tn.Hostname == "" {
+		h, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		tn.Hostname = h + "-tailsys"
+	}
+
+	err := tn.initClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -54,11 +74,17 @@ func (tn *Tailnet) NewConnection(ctx context.Context, opts ...Option) error {
 		//TODO: this is erroring, I think it's a bug on the tailscale side
 		//    Logger: func(string, ...any) {},
 	}
-  tn.TSServer = srv
+	tn.TSServer = srv
+
+	err = tn.createRPCServer()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (tn *Tailnet) InitClient(ctx context.Context) error {
+func (tn *Tailnet) initClient(ctx context.Context) error {
 	var capabilities tailscale.KeyCapabilities
 	capabilities.Devices.Create.Reusable = true
 	capabilities.Devices.Create.Ephemeral = true
@@ -68,7 +94,8 @@ func (tn *Tailnet) InitClient(ctx context.Context) error {
 	var topts []tailscale.CreateKeyOption
 	topts = append(topts, tailscale.WithKeyExpiry(10*time.Second))
 
-	if useOauth(tn.ClientID, tn.ClientSecret) {
+	if tn.authType == OAUTH {
+		fmt.Println("connecting with oauth")
 		client, err := tailscale.NewClient(
 			"",
 			"-",
@@ -85,19 +112,15 @@ func (tn *Tailnet) InitClient(ctx context.Context) error {
 		tn.Client = client
 		tn.reapDeviceID(ctx)
 		return nil
+	} else if tn.authType == AUTHKEY {
+		fmt.Println("connecting with authkey")
+		client, err := tailscale.NewClient(tn.AuthKey, "-")
+		if err != nil {
+			return err
+		}
+		tn.Client = client
+		tn.reapDeviceID(ctx)
 	}
-
-	if tn.AuthKey == "" {
-		return errors.New("must set one of oauth keys or api key")
-	}
-
-	client, err := tailscale.NewClient(tn.AuthKey, "-")
-	if err != nil {
-		return err
-	}
-	tn.Client = client
-	tn.reapDeviceID(ctx)
-
 	return nil
 }
 
@@ -198,37 +221,52 @@ func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	}
 }
 
+func (tn *Tailnet) WithPort(port string) Option {
+	return func(tn *Tailnet) error {
+		tn.Port = port
+		return nil
+	}
+}
+
 func (tn *Tailnet) createRPCServer() error {
 
-	if err := tn.TSServer.Start(); err != nil {
-		return err
+	if tn.authType != NONE {
+		if err := tn.TSServer.Start(); err != nil {
+			return err
+		}
+		if tn.Port == "" {
+			tn.Port = "6655"
+		}
+		//TODO: I need to pass a listener port to this
+		ln, err := tn.TSServer.Listen("tcp", ":"+tn.Port)
+		if err != nil {
+			return err
+		}
+		tn.Addr = ln.Addr().String()
+		tn.Listener = ln
+	} else {
+		ln, err := net.Listen("tcp", ":"+tn.Port)
+		if err != nil {
+			return err
+		}
+		tn.Addr = ln.Addr().String()
+		tn.Listener = ln
 	}
-
-	//TODO: I need to pass a listener port to this
-	ln, err := tn.TSServer.Listen("tcp", ":6655")
-	if err != nil {
-		return err
-	}
-	tn.Addr = ln.Addr().String()
 
 	s := grpc.NewServer()
-
-	tn.Listener = ln
 	tn.GRPCServer = s
 
 	return nil
 }
 
-func useOauth(clientId, clientSecret string) bool {
-	if clientId == "" || clientSecret == "" {
-		return false
+func (tn *Tailnet) getAuthType() AuthType {
+	if tn.ClientID != "" && tn.ClientSecret != "" {
+		return OAUTH
 	}
-	return true
-}
 
-func useAPIKey(key string) bool {
-	if key == "" {
-		return false
+	if tn.AuthKey != "" {
+		return AUTHKEY
+
 	}
-	return true
+	return NONE
 }

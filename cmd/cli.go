@@ -14,16 +14,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Enum type for Auth Type
-type AuthType int
-
-// Enum definition for Auth Type
-const (
-	OAUTH AuthType = iota
-	AUTHKEY
-	NONE
-)
-
 func initConfig(cmd *cobra.Command) error {
 	v := viper.New()
 	if Check() {
@@ -93,18 +83,6 @@ type GlobalFlags struct {
 	DataDirectory string
 }
 
-func (gf *GlobalFlags) GetAuthType() AuthType {
-	if gf.ClientId != "" && gf.ClientSecret != "" {
-		return OAUTH
-	}
-
-	if gf.AuthKey != "" {
-		return AUTHKEY
-
-	}
-	return NONE
-}
-
 var gf = GlobalFlags{}
 
 func Start() error {
@@ -172,27 +150,18 @@ func coodinationServerCommand() *cobra.Command {
 				return err
 			}
 
-			authType := gf.GetAuthType()
-
 			hostname := gf.Hostname
-			switch authType {
-			case OAUTH:
-				id := gf.ClientId
-				secret := gf.ClientSecret
-				if err := co.ConnectOauth(ctx, id, secret, hostname); err != nil {
-					return err
-				}
-			case AUTHKEY:
-				authkey := gf.AuthKey
-				if err := co.ConnectAuthKey(ctx, authkey, hostname); err != nil {
-					return err
-				}
-			case NONE:
-				//TODO: Implement plain non-tailnet mode
-				fmt.Println("Not yet implemented")
+			if err := co.Connect(ctx,
+				co.WithAuthKey(gf.AuthKey),
+				co.WithOauth(gf.ClientId, gf.ClientSecret),
+				co.WithHostname(hostname),
+				co.WithTags("tag:tailsys"),
+				co.WithScopes("devices", "logs:read", "routes:read"),
+				co.WithPort(gf.Port),
+			); err != nil {
+				return err
 			}
 			return co.StartRPCCoordinationServer(ctx)
-
 		},
 	}
 	ccmd.Flags().BoolVar(&cof.DevMode, "dev", false, "Enable dev mode, accept all incoming keys")
@@ -224,22 +193,17 @@ func clientCommand() *cobra.Command {
 
 			hostname := gf.Hostname
 			coServer := cif.CoordinationServer
-			authType := gf.GetAuthType()
-
-			switch authType {
-			case OAUTH:
-				id := gf.ClientId
-				secret := gf.ClientSecret
-				if err := cl.ConnectOauth(ctx, id, secret, hostname); err != nil {
-					return err
-				}
-			case AUTHKEY:
-				authkey := gf.AuthKey
-				if err := cl.ConnectAuthKey(ctx, authkey, hostname); err != nil {
-					return err
-				}
+			if err := cl.Connect(ctx,
+				cl.WithAuthKey(gf.AuthKey),
+				cl.WithOauth(gf.ClientId, gf.ClientSecret),
+				cl.WithHostname(hostname),
+				cl.WithTags("tag:tailsys"),
+				cl.WithScopes("devices", "logs:read", "routes:read"),
+				cl.WithPort(gf.Port),
+			); err != nil {
+				return err
 			}
-			fmt.Println("connected to tailnet, registering with coordination server")
+			fmt.Println("connected, registering with coordination server")
 			if err := cl.RegisterWithCoordinationServer(ctx, coServer); err != nil {
 				return err
 			}

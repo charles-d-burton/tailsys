@@ -38,6 +38,7 @@ message NodeRegistrationRequest {
 message NodeRegistrationResponse {
   bool accepted = 1;
   Key key = 2;
+  string hostname = 3;
 }
 
 service Registration {
