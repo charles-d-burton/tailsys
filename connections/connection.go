@@ -11,6 +11,7 @@ import (
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"tailscale.com/tsnet"
 )
 
@@ -82,6 +83,24 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 	}
 
 	return nil
+}
+
+func (tn *Tailnet) DialContext(ctx context.Context, addr string) (*grpc.ClientConn, error) {
+  //Plain dialer if not on tsnet
+  //Pass in a cancelable context
+  if tn.authType == NONE {
+    conn, err := grpc.DialContext(ctx, addr,   
+		  grpc.WithTransportCredentials(insecure.NewCredentials()),
+    )
+    return conn, err
+  }
+
+	return grpc.DialContext(ctx, addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			return tn.TSServer.Dial(ctx, "-", addr+":6655")
+		}),
+	)
 }
 
 func (tn *Tailnet) initClient(ctx context.Context) error {

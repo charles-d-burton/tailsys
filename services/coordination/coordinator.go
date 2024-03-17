@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
@@ -12,8 +11,6 @@ import (
 	"github.com/charles-d-burton/tailsys/data/queries"
 	"github.com/charles-d-burton/tailsys/services"
 	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -124,14 +121,8 @@ func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *que
 	host := hostRow.Hostname
 	ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
-
+  conn, err := co.DialContext(ctxTo, host)
 	//TODO: Probably need to set the tailnet fqdn at some point
-	conn, err := grpc.DialContext(ctxTo, host,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return co.TSServer.Dial(ctx, "-", host+":6655")
-		}),
-	)
 	defer conn.Close()
 
 	if err != nil {
