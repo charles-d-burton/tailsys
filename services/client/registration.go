@@ -39,6 +39,7 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 		req := &pb.NodeRegistrationRequest{
 			Info: &pb.SysInfo{
 				Hostname: cl.Hostname,
+        Port: cl.Port,
 				Type:     pb.OSType_LINUX,
 				Ip:       cl.Hostname,
 				LastSeen: timestamppb.Now(),

@@ -129,7 +129,7 @@ func (tn *Tailnet) DialContext(ctx context.Context, addr string, certs *TLSConfi
 	return grpc.DialContext(ctx, addr,
 		grpc.WithTransportCredentials(tc),
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return tn.TSServer.Dial(ctx, "-", addr+":6655")
+			return tn.TSServer.Dial(ctx, "-", addr)
 		}),
 	)
 }
@@ -251,7 +251,7 @@ func (tn *Tailnet) checkForKeys() bool {
   return true
 }
 
-// GetDevices returns a list of devices that are conected to the configured tailnet
+// GetDevices returns a list of devices that are connected to the configured tailnet
 func (tn *Tailnet) GetDevices(ctx context.Context) ([]tailscale.Device, error) {
 	return tn.Client.Devices(ctx)
 }

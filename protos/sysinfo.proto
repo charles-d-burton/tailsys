@@ -22,6 +22,7 @@ message SysInfo {
   OSType type = 2;
   string ip = 3;
   google.protobuf.Timestamp lastSeen = 4;
+  string port = 5;
 }
 
 message Key {

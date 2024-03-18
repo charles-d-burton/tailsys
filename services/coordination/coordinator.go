@@ -120,7 +120,7 @@ func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *que
 	host := hostRow.Hostname
 	ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
-  conn, err := co.DialContext(ctxTo, host, &connections.TLSConfig{TLSKey: node.Tlskey, TLSCert: node.Tlscert})
+  conn, err := co.DialContext(ctxTo, host+":"+node.Info.Port, &connections.TLSConfig{TLSKey: node.Tlskey, TLSCert: node.Tlscert})
 	//TODO: Probably need to set the tailnet fqdn at some point
 	defer conn.Close()
 
