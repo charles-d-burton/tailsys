@@ -367,10 +367,13 @@ github.com/tailscale/hujson
 # github.com/tailscale/netlink v1.1.1-0.20211101221916-cabfb018fe85
 ## explicit; go 1.12
 github.com/tailscale/netlink
+# github.com/tailscale/peercred v0.0.0-20240214030740-b535050b2aa4
+## explicit; go 1.18
+github.com/tailscale/peercred
 # github.com/tailscale/tailscale-client-go v1.16.0
 ## explicit; go 1.22.0
 github.com/tailscale/tailscale-client-go/tailscale
-# github.com/tailscale/web-client-prebuilt v0.0.0-20240208184856-443a64766f61
+# github.com/tailscale/web-client-prebuilt v0.0.0-20240226180453-5db17b287bf1
 ## explicit; go 1.21
 github.com/tailscale/web-client-prebuilt
 # github.com/tailscale/wireguard-go v0.0.0-20231121184858-cc193a0b3272
@@ -629,7 +632,7 @@ gopkg.in/ini.v1
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# gvisor.dev/gvisor v0.0.0-20240119233241-c9c1d4f9b186
+# gvisor.dev/gvisor v0.0.0-20240306221502-ee1e1f6070e3
 ## explicit; go 1.21.1
 gvisor.dev/gvisor/pkg/atomicbitops
 gvisor.dev/gvisor/pkg/bits
@@ -674,9 +677,6 @@ gvisor.dev/gvisor/pkg/tcpip/transport/tcp
 gvisor.dev/gvisor/pkg/tcpip/transport/tcpconntrack
 gvisor.dev/gvisor/pkg/tcpip/transport/udp
 gvisor.dev/gvisor/pkg/waiter
-# inet.af/peercred v0.0.0-20210906144145-0893ea02156a
-## explicit; go 1.14
-inet.af/peercred
 # modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6
 ## explicit; go 1.20
 modernc.org/gc/v3
@@ -732,7 +732,7 @@ nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/util
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
-# tailscale.com v1.60.1
+# tailscale.com v1.62.0
 ## explicit; go 1.22.0
 tailscale.com
 tailscale.com/appc
@@ -750,6 +750,7 @@ tailscale.com/derp
 tailscale.com/derp/derphttp
 tailscale.com/disco
 tailscale.com/doctor
+tailscale.com/doctor/ethtool
 tailscale.com/doctor/permissions
 tailscale.com/doctor/routetable
 tailscale.com/envknob

@@ -110,6 +110,7 @@ var handler = map[string]localAPIHandler{
 	"serve-config":                (*Handler).serveServeConfig,
 	"set-dns":                     (*Handler).serveSetDNS,
 	"set-expiry-sooner":           (*Handler).serveSetExpirySooner,
+	"set-gui-visible":             (*Handler).serveSetGUIVisible,
 	"tailfs/fileserver-address":   (*Handler).serveTailFSFileServerAddr,
 	"tailfs/shares":               (*Handler).serveShares,
 	"start":                       (*Handler).serveStart,
@@ -598,6 +599,8 @@ func (h *Handler) serveDebug(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		h.b.DebugNotify(n)
+	case "notify-last-netmap":
+		h.b.DebugNotifyLastNetMap()
 	case "break-tcp-conns":
 		err = h.b.DebugBreakTCPConns()
 	case "break-derp-conns":
@@ -1904,6 +1907,27 @@ func (h *Handler) serveTKAStatus(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
+func (h *Handler) serveSetGUIVisible(w http.ResponseWriter, r *http.Request) {
+	if r.Method != httpm.POST {
+		http.Error(w, "use POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type setGUIVisibleRequest struct {
+		IsVisible bool   // whether the Tailscale client UI is now presented to the user
+		SessionID string // the last SessionID sent to the client in ipn.Notify.SessionID
+	}
+	var req setGUIVisibleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	// TODO(bradfitz): use `req.IsVisible == true` to flush netmap
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *Handler) serveTKASign(w http.ResponseWriter, r *http.Request) {
 	if !h.PermitWrite {
 		http.Error(w, "lock sign access denied", http.StatusForbidden)
@@ -2549,9 +2573,14 @@ func (h *Handler) serveTailFSFileServerAddr(w http.ResponseWriter, r *http.Reque
 }
 
 // serveShares handles the management of tailfs shares.
+//
+// PUT - adds or updates an existing share
+// DELETE - removes a share
+// GET - gets a list of all shares, sorted by name
+// POST - renames an existing share
 func (h *Handler) serveShares(w http.ResponseWriter, r *http.Request) {
 	if !h.b.TailFSSharingEnabled() {
-		http.Error(w, `tailfs sharing not enabled, please add the attribute "tailfs:share" to this node in your ACLs' "nodeAttrs" section`, http.StatusInternalServerError)
+		http.Error(w, `tailfs sharing not enabled, please add the attribute "tailfs:share" to this node in your ACLs' "nodeAttrs" section`, http.StatusForbidden)
 		return
 	}
 	switch r.Method {
@@ -2581,20 +2610,23 @@ func (h *Handler) serveShares(w http.ResponseWriter, r *http.Request) {
 			}
 			share.As = username
 		}
-		err = h.b.TailFSAddShare(&share)
+		err = h.b.TailFSSetShare(&share)
 		if err != nil {
+			if errors.Is(err, ipnlocal.ErrInvalidShareName) {
+				http.Error(w, "invalid share name", http.StatusBadRequest)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
 	case "DELETE":
-		var share tailfs.Share
-		err := json.NewDecoder(r.Body).Decode(&share)
+		b, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		err = h.b.TailFSRemoveShare(share.Name)
+		err = h.b.TailFSRemoveShare(string(b))
 		if err != nil {
 			if os.IsNotExist(err) {
 				http.Error(w, "share not found", http.StatusNotFound)
@@ -2604,13 +2636,34 @@ func (h *Handler) serveShares(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	case "GET":
-		shares, err := h.b.TailFSGetShares()
+	case "POST":
+		var names [2]string
+		err := json.NewDecoder(r.Body).Decode(&names)
 		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = h.b.TailFSRenameShare(names[0], names[1])
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "share not found", http.StatusNotFound)
+				return
+			}
+			if os.IsExist(err) {
+				http.Error(w, "share name already used", http.StatusBadRequest)
+				return
+			}
+			if errors.Is(err, ipnlocal.ErrInvalidShareName) {
+				http.Error(w, "invalid share name", http.StatusBadRequest)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		err = json.NewEncoder(w).Encode(shares)
+		w.WriteHeader(http.StatusNoContent)
+	case "GET":
+		shares := h.b.TailFSGetShares()
+		err := json.NewEncoder(w).Encode(shares)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

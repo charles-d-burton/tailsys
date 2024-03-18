@@ -3,8 +3,12 @@
 
 package tailfs
 
+//go:generate go run tailscale.com/cmd/viewer --type=Share --clonefunc
+
 import (
+	"bytes"
 	"net/http"
+	"strings"
 )
 
 var (
@@ -21,16 +25,57 @@ func AllowShareAs() bool {
 // Share configures a folder to be shared through TailFS.
 type Share struct {
 	// Name is how this share appears on remote nodes.
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 
 	// Path is the path to the directory on this machine that's being shared.
-	Path string `json:"path"`
+	Path string `json:"path,omitempty"`
 
 	// As is the UNIX or Windows username of the local account used for this
 	// share. File read/write permissions are enforced based on this username.
 	// Can be left blank to use the default value of "whoever is running the
 	// Tailscale GUI".
-	As string `json:"who"`
+	As string `json:"who,omitempty"`
+
+	// BookmarkData contains security-scoped bookmark data for the Sandboxed
+	// Mac application. The Sandboxed Mac application gains permission to
+	// access the Share's folder as a result of a user selecting it in a file
+	// picker. In order to retain access to it across restarts, it needs to
+	// hold on to a security-scoped bookmark. That bookmark is stored here. See
+	// https://developer.apple.com/documentation/security/app_sandbox/accessing_files_from_the_macos_app_sandbox#4144043
+	BookmarkData []byte `json:"bookmarkData,omitempty"`
+}
+
+func ShareViewsEqual(a, b ShareView) bool {
+	if !a.Valid() && !b.Valid() {
+		return true
+	}
+	if !a.Valid() || !b.Valid() {
+		return false
+	}
+	return a.Name() == b.Name() && a.Path() == b.Path() && a.As() == b.As() && a.BookmarkData().Equal(b.ж.BookmarkData)
+}
+
+func SharesEqual(a, b *Share) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Name == b.Name && a.Path == b.Path && a.As == b.As && bytes.Equal(a.BookmarkData, b.BookmarkData)
+}
+
+func CompareShares(a, b *Share) int {
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return -1
+	}
+	if b == nil {
+		return 1
+	}
+	return strings.Compare(a.Name, b.Name)
 }
 
 // FileSystemForRemote is the TailFS filesystem exposed to remote nodes. It
@@ -48,7 +93,7 @@ type FileSystemForRemote interface {
 	// AllowShareAs() reports true, we will use one subprocess per user to
 	// access the filesystem (see userServer). Otherwise, we will use the file
 	// server configured via SetFileServerAddr.
-	SetShares(shares map[string]*Share)
+	SetShares(shares []*Share)
 
 	// ServeHTTPWithPerms behaves like the similar method from http.Handler but
 	// also accepts a Permissions map that captures the permissions of the

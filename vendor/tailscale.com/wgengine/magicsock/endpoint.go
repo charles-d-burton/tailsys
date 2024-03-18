@@ -1366,7 +1366,7 @@ func (de *endpoint) updateFromNode(n tailcfg.NodeView, heartbeatDisabled bool, p
 }
 
 func (de *endpoint) setEndpointsLocked(eps interface {
-	LenIter() []struct{}
+	Len() int
 	At(i int) netip.AddrPort
 }) {
 	for _, st := range de.endpointState {
@@ -1374,7 +1374,7 @@ func (de *endpoint) setEndpointsLocked(eps interface {
 	}
 
 	var newIpps []netip.AddrPort
-	for i := range eps.LenIter() {
+	for i := range eps.Len() {
 		if i > math.MaxInt16 {
 			// Seems unlikely.
 			break
@@ -1665,14 +1665,20 @@ func betterAddr(a, b addrQuality) bool {
 	// pay for the bandwidth in a cloud environment.
 	//
 	// Additionally, prefer any loopback address strongly over non-loopback
-	// addresses.
+	// addresses, and prefer link-local unicast addresses over other types
+	// of private IP addresses since it's definitionally more likely that
+	// they'll be on the same network segment than a general private IP.
 	if a.Addr().IsLoopback() {
 		aPoints += 50
+	} else if a.Addr().IsLinkLocalUnicast() {
+		aPoints += 30
 	} else if a.Addr().IsPrivate() {
 		aPoints += 20
 	}
 	if b.Addr().IsLoopback() {
 		bPoints += 50
+	} else if b.Addr().IsLinkLocalUnicast() {
+		bPoints += 30
 	} else if b.Addr().IsPrivate() {
 		bPoints += 20
 	}
