@@ -14,6 +14,7 @@ require (
 	golang.org/x/sys v0.17.0
 	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.29.5
 	tailscale.com v1.60.1
 )
@@ -115,7 +116,6 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240123012728-ef4313101c80 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gvisor.dev/gvisor v0.0.0-20240119233241-c9c1d4f9b186 // indirect
 	inet.af/peercred v0.0.0-20210906144145-0893ea02156a // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect

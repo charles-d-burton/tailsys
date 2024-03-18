@@ -15,8 +15,18 @@ message CommandResonse {
   google.protobuf.Timestamp ran = 1;
   bool successful = 2;
   bytes output = 3;
+  int32 exitCode = 4;
 }
 
 service CommandRunner {
   rpc Command(CommandRequest) returns (CommandResonse) {} 
 }
+
+message NodeQuery {
+  string pattern = 1;
+  Key key = 2;
+}
+
+// service CommandGetNodes {
+//   rpc returns 
+// }

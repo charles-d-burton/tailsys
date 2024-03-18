@@ -19,3 +19,11 @@ tailsys
 
 # Go workspace file
 go.work
+
+# TLS
+*.key
+*.pem
+*.crt
+certs.yaml
+server-certs.yaml
+server_config/*.yaml

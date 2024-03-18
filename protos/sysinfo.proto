@@ -33,6 +33,8 @@ message NodeRegistrationRequest {
   Key key = 2;
   SystemType systemType = 3;
   bool accepted = 4;
+  string tlskey = 5;
+  string tlscert = 6;
 }
 
 message NodeRegistrationResponse {

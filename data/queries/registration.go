@@ -34,7 +34,7 @@ func GetRegisteredHosts(db *sql.DB) chan *RegisteredHostsRow {
 		defer rows.Close()
 		for rows.Next() {
 			r := RegisteredHostsRow{}
-			err := rows.Scan(&r.Hostname, &r.Key, &r.Data)
+			err := rows.Scan(&r.Hostname, &r.Key, &r.Data )
 			if err != nil {
 				fmt.Println(fmt.Errorf("error loading row: %w\n", err))
 			}
@@ -49,7 +49,7 @@ func GetRegisteredHosts(db *sql.DB) chan *RegisteredHostsRow {
 func GetRegisteredHost(db *sql.DB, hostname string) (*RegisteredHostsRow, error) {
 	row := db.QueryRow(GetHostQuery, hostname)
 	r := RegisteredHostsRow{}
-	err := row.Scan(&r.Hostname, &r.Key, &r.Data)
+	err := row.Scan(&r.Hostname, &r.Key, &r.Data, &r.Key)
 	if err != nil {
 		return nil, err
 	}

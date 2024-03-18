@@ -3,8 +3,8 @@ package coordination
 import (
 	"context"
 	"errors"
-	"fmt"
-	"time"
+	"fmt" 
+  "time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/connections"
@@ -35,10 +35,6 @@ func (co *Coordinator) NewCoordinator(ctx context.Context, opts ...Option) error
 			return err
 		}
 	}
-
-	if co.DB == nil {
-		return errors.New("datastore not initialized")
-	}
 	return nil
 }
 
@@ -51,12 +47,15 @@ func (co *Coordinator) WithDevMode(mode bool) Option {
 	}
 }
 
-func (co *Coordinator) WithDataDir(dir string) Option {
-	return func(co *Coordinator) error {
-		return co.StartDB(dir)
-	}
-} // StartRPCCoordinationServer Register the gRPC server endpoints and start the server
+func (co *Coordinator) StartDatabase(ctx context.Context) error {
+  return co.StartDB(co.ConfigDir)
+}
+
+// StartRPCCoordinationServer Register the gRPC server endpoints and start the server
 func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
+	if co.DB == nil {
+		return errors.New("datastore not initialized")
+	}
 	pb.RegisterPingerServer(co.GRPCServer, &services.Pinger{})
 	pb.RegisterRegistrationServer(co.GRPCServer, &RegistrationServer{
 		DevMode:  co.devMode,
@@ -121,7 +120,7 @@ func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *que
 	host := hostRow.Hostname
 	ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
-  conn, err := co.DialContext(ctxTo, host)
+  conn, err := co.DialContext(ctxTo, host, &connections.TLSConfig{TLSKey: node.Tlskey, TLSCert: node.Tlscert})
 	//TODO: Probably need to set the tailnet fqdn at some point
 	defer conn.Close()
 

@@ -29,15 +29,16 @@ type DataManagement struct {
 }
 
 func (dm *DataManagement) StartDB(dir string) error {
-	fmt.Println("creating database at: ", dir)
+  dbDir := dir + "/db"
+	fmt.Println("creating database at: ", dbDir)
 	// if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 	//   return err
 	// }
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return err
 	}
 
-	db, err := sql.Open("sqlite", dir+"/tailsys.db")
+	db, err := sql.Open("sqlite", dbDir+"/tailsys.db")
 	if err != nil {
 		return err
 	}

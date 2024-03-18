@@ -80,7 +80,7 @@ type GlobalFlags struct {
 	Port          string
 	Hostname      string
 	Verbose       bool
-	DataDirectory string
+	ConfigDirectory string
 }
 
 var gf = GlobalFlags{}
@@ -109,7 +109,7 @@ func rootCommand() *cobra.Command {
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	rootCmd.PersistentFlags().StringVar(&gf.Hostname, "hostname", "", "Override hostname")
 	viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
-	rootCmd.PersistentFlags().StringVar(&gf.DataDirectory, "data-directory", getDataDirectory(), "Set the location for the data store")
+	rootCmd.PersistentFlags().StringVar(&gf.ConfigDirectory, "data-directory", getConfigDirectory(), "Set the location for the data store")
 	viper.BindPFlag("data-directory", rootCmd.PersistentFlags().Lookup("data-directory"))
 
 	rootCmd.PersistentFlags().BoolVarP(&gf.Verbose, "verbose", "v", false, "Verbose logging")
@@ -138,12 +138,11 @@ func coodinationServerCommand() *cobra.Command {
 
 			var co coordination.Coordinator
 			fmt.Println("dev-mode: ", cof.DevMode)
-			fmt.Println("data-dir: ", gf.DataDirectory)
+			fmt.Println("data-dir: ", gf.ConfigDirectory)
 
 			ctx := context.Background()
 			err := co.NewCoordinator(ctx,
 				co.WithDevMode(cof.DevMode),
-				co.WithDataDir(gf.DataDirectory),
 			)
 
 			if err != nil {
@@ -158,9 +157,14 @@ func coodinationServerCommand() *cobra.Command {
 				co.WithTags("tag:tailsys"),
 				co.WithScopes("devices", "logs:read", "routes:read"),
 				co.WithPort(gf.Port),
+        co.WithConfigDir(gf.ConfigDirectory),
 			); err != nil {
 				return err
 			}
+      err = co.StartDatabase(ctx)
+      if err != nil {
+        return err
+      }
 			return co.StartRPCCoordinationServer(ctx)
 		},
 	}
@@ -186,7 +190,7 @@ func clientCommand() *cobra.Command {
 			ctx := context.Background()
 
 			var cl client.Client
-			err := cl.NewClient(ctx, cl.WithDataDir(gf.DataDirectory))
+			err := cl.NewClient(ctx)
 			if err != nil {
 				return err
 			}
@@ -200,14 +204,19 @@ func clientCommand() *cobra.Command {
 				cl.WithTags("tag:tailsys"),
 				cl.WithScopes("devices", "logs:read", "routes:read"),
 				cl.WithPort(gf.Port),
+        cl.WithConfigDir(gf.ConfigDirectory),
 			); err != nil {
 				return err
 			}
+			fmt.Println("registered, starting client operations")
+      err = cl.StartDatabase(ctx)
+      if err != nil {
+        return err
+      }
 			fmt.Println("connected, registering with coordination server")
 			if err := cl.RegisterWithCoordinationServer(ctx, coServer); err != nil {
 				return err
 			}
-			fmt.Println("registered, starting client operations")
 			return cl.StartRPCClientMode(ctx)
 
 		},
@@ -241,16 +250,16 @@ func noninteractiveCommand() *cobra.Command {
 	return ccmd
 }
 
-func getDataDirectory() string {
+func getConfigDirectory() string {
 	ddir := ""
 	if Check() {
-		ddir = "/var/lib/tailsys/db"
+		ddir = "/var/lib/tailsys/"
 	} else {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			cobra.CheckErr(err)
 		}
-		ddir = filepath.Join(home, ".local", "tailsys", "db")
+		ddir = filepath.Join(home, ".local", "tailsys")
 	}
 	return ddir
 }

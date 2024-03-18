@@ -2,8 +2,15 @@ package connections
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"strings"
@@ -11,7 +18,8 @@ import (
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
+	"gopkg.in/yaml.v3"
 	"tailscale.com/tsnet"
 )
 
@@ -27,12 +35,14 @@ const (
 
 // Tailnet main struct to hold connection to the tailnet information
 type Tailnet struct {
+  ConfigDir string
 	ClientID       string
 	ClientSecret   string
 	AuthKey        string
 	Hostname       string
 	Addr           string
 	Port           string
+  TLSConfig TLSConfig
 	Scopes         []string
 	Tags           []string
 	Client         *tailscale.Client
@@ -41,6 +51,11 @@ type Tailnet struct {
 	Listener       net.Listener
 	TailnetLogging bool
 	authType       AuthType
+}
+
+type TLSConfig struct {
+  TLSKey         string `yaml:"key"`
+  TLSCert        string `yaml:"cert"`
 }
 
 // Option function to set different options on the tailnet config
@@ -54,6 +69,10 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 			return err
 		}
 	}
+
+  if err := tn.generateKeyPair(); err != nil {
+    return err
+  }
 
 	if tn.Hostname == "" {
 		h, err := os.Hostname()
@@ -85,18 +104,30 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 	return nil
 }
 
-func (tn *Tailnet) DialContext(ctx context.Context, addr string) (*grpc.ClientConn, error) {
+func (tn *Tailnet) DialContext(ctx context.Context, addr string, certs *TLSConfig) (*grpc.ClientConn, error) {
   //Plain dialer if not on tsnet
   //Pass in a cancelable context
+  pool := x509.NewCertPool()
+  pool.AppendCertsFromPEM([]byte(certs.TLSCert))
+  pair, err := tls.X509KeyPair([]byte(certs.TLSCert), []byte(certs.TLSKey))
+  if err != nil {
+    return nil, err
+  }
+
+  tc := credentials.NewTLS(&tls.Config{
+    Certificates: []tls.Certificate{pair},
+    ClientAuth: tls.RequireAndVerifyClientCert,
+    ClientCAs: pool,
+    RootCAs: pool,
+  })
+
   if tn.authType == NONE {
-    conn, err := grpc.DialContext(ctx, addr,   
-		  grpc.WithTransportCredentials(insecure.NewCredentials()),
-    )
+    conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(tc))
     return conn, err
   }
 
 	return grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(tc),
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 			return tn.TSServer.Dial(ctx, "-", addr+":6655")
 		}),
@@ -163,6 +194,63 @@ func (tn *Tailnet) reapDeviceID(ctx context.Context) error {
 	return nil
 }
 
+func (tn *Tailnet) generateKeyPair() error {
+  if !tn.checkForKeys() {
+    fmt.Println("no keys found, generating new keys")
+    priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+    if err != nil {
+      return err
+    }
+    privDer, err := x509.MarshalPKCS8PrivateKey(priv)
+    if err != nil {
+      return err
+    }
+    privPem := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDer})
+
+    template := &x509.Certificate{
+      SerialNumber: new(big.Int),
+      NotAfter: time.Now().Add(time.Hour * 87660), //Ten years
+      DNSNames: []string{tn.Hostname},
+    }
+
+    certDer, err := x509.CreateCertificate(rand.Reader, template, template, priv.Public(), priv)
+    if err != nil {
+      return err
+    }
+    certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDer})
+    tc := TLSConfig{}
+    tc.TLSCert = string(certPem)
+    tc.TLSKey = string(privPem)
+    
+    d, err := yaml.Marshal(&tc)
+    if err != nil {
+      return err
+    }
+    err = os.MkdirAll(tn.ConfigDir + "/certs", 0750)
+    err = os.WriteFile(tn.ConfigDir + "/certs/certs.yaml", d, 0640)
+    if err != nil {
+      return err
+    }
+    tn.TLSConfig = tc 
+
+  }
+  return nil
+}
+
+func (tn *Tailnet) checkForKeys() bool {
+  tc := TLSConfig{}
+  c, err := os.ReadFile(tn.ConfigDir + "/certs/certs.yaml")
+  if err != nil {
+    return false
+  }
+  err = yaml.Unmarshal(c, &tc)
+  if err != nil {
+    return false
+  }
+  tn.TLSConfig = tc
+  return true
+}
+
 // GetDevices returns a list of devices that are conected to the configured tailnet
 func (tn *Tailnet) GetDevices(ctx context.Context) ([]tailscale.Device, error) {
 	return tn.Client.Devices(ctx)
@@ -218,6 +306,7 @@ func (tn *Tailnet) WithTags(tags ...string) Option {
 	}
 }
 
+//WithHostname Override the hostname on the tailnet
 func (tn *Tailnet) WithHostname(hostname string) Option {
 	return func(tn *Tailnet) error {
 		if hostname == "" {
@@ -233,6 +322,7 @@ func (tn *Tailnet) WithHostname(hostname string) Option {
 	}
 }
 
+//WithTailnetLogging Enable/Disable logging on the tailnet
 func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	return func(tn *Tailnet) error {
 		tn.TailnetLogging = enabled
@@ -240,6 +330,7 @@ func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	}
 }
 
+//WithPort Port to bind the grpc server to
 func (tn *Tailnet) WithPort(port string) Option {
 	return func(tn *Tailnet) error {
 		tn.Port = port
@@ -247,6 +338,14 @@ func (tn *Tailnet) WithPort(port string) Option {
 	}
 }
 
+func (tn *Tailnet) WithConfigDir(dir string) Option {
+  return func(tn *Tailnet) error {
+    tn.ConfigDir = dir
+    return nil
+  }
+}
+
+//createRPCServer create and start the gRPC server
 func (tn *Tailnet) createRPCServer() error {
 
 	if tn.authType != NONE {
@@ -272,12 +371,26 @@ func (tn *Tailnet) createRPCServer() error {
 		tn.Listener = ln
 	}
 
-	s := grpc.NewServer()
+  pool := x509.NewCertPool()
+  pool.AppendCertsFromPEM([]byte(tn.TLSConfig.TLSCert))
+  pair, err := tls.X509KeyPair([]byte(tn.TLSConfig.TLSCert), []byte(tn.TLSConfig.TLSKey))
+  if err != nil {
+    return err
+  }
+  tc := credentials.NewTLS(&tls.Config{
+    Certificates: []tls.Certificate{pair},
+    ClientAuth: tls.RequireAndVerifyClientCert,
+    ClientCAs: pool,
+    RootCAs: pool,
+  })
+
+	s := grpc.NewServer(grpc.Creds(tc))
 	tn.GRPCServer = s
 
 	return nil
 }
 
+//getAuthType Determine the type of auth to connect to the tailnet
 func (tn *Tailnet) getAuthType() AuthType {
 	if tn.ClientID != "" && tn.ClientSecret != "" {
 		return OAUTH
@@ -289,3 +402,4 @@ func (tn *Tailnet) getAuthType() AuthType {
 	}
 	return NONE
 }
+

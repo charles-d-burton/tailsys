@@ -11,6 +11,8 @@ services:
       - TS_DEV=true
     command:
       - co
+    volumes:
+      - ./server_config:/var/lib/tailsys/
       
   # client:
   #   build:
@@ -26,8 +28,8 @@ services:
   #   depends_on:
   #     - coordination
 
+        #   build:
   # command-test:
-  #   build:
   #     context: .
   #     target: ni 
   #   environment:

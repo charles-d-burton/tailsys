@@ -12,8 +12,8 @@ import (
 )
 
 type Client struct {
+  services.DataManagement
 	connections.Tailnet
-	services.DataManagement
 	ID string
 }
 
@@ -27,21 +27,19 @@ func (cl *Client) NewClient(ctx context.Context, opts ...Option) error {
 		}
 	}
 
-	if cl.DB == nil {
-		return errors.New("datastore not initialized")
-	}
 	cl.ID = uuid.NewString()
-	return nil
+  return nil
 }
 
-func (cl *Client) WithDataDir(dir string) Option {
-	return func(cl *Client) error {
-		return cl.StartDB(dir)
-	}
+func (cl *Client) StartDatabase(ctx context.Context) error {
+  return cl.StartDB(cl.ConfigDir)
 }
 
 func (cl *Client) StartRPCClientMode(ctx context.Context) error {
 	fmt.Println("starting grpc client server")
+	if cl.DB == nil {
+		return errors.New("datastore not initialized")
+	}
 
 	pb.RegisterPingerServer(cl.GRPCServer, &services.Pinger{
 		DB: cl.DB,
