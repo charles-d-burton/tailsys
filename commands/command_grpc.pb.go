@@ -26,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CommandRunnerClient interface {
-	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResonse, error)
+	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
 }
 
 type commandRunnerClient struct {
@@ -37,8 +37,8 @@ func NewCommandRunnerClient(cc grpc.ClientConnInterface) CommandRunnerClient {
 	return &commandRunnerClient{cc}
 }
 
-func (c *commandRunnerClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResonse, error) {
-	out := new(CommandResonse)
+func (c *commandRunnerClient) Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
+	out := new(CommandResponse)
 	err := c.cc.Invoke(ctx, CommandRunner_Command_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func (c *commandRunnerClient) Command(ctx context.Context, in *CommandRequest, o
 // All implementations must embed UnimplementedCommandRunnerServer
 // for forward compatibility
 type CommandRunnerServer interface {
-	Command(context.Context, *CommandRequest) (*CommandResonse, error)
+	Command(context.Context, *CommandRequest) (*CommandResponse, error)
 	mustEmbedUnimplementedCommandRunnerServer()
 }
 
@@ -58,7 +58,7 @@ type CommandRunnerServer interface {
 type UnimplementedCommandRunnerServer struct {
 }
 
-func (UnimplementedCommandRunnerServer) Command(context.Context, *CommandRequest) (*CommandResonse, error) {
+func (UnimplementedCommandRunnerServer) Command(context.Context, *CommandRequest) (*CommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Command not implemented")
 }
 func (UnimplementedCommandRunnerServer) mustEmbedUnimplementedCommandRunnerServer() {}
@@ -105,5 +105,197 @@ var CommandRunner_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
+	Metadata: "command.proto",
+}
+
+const (
+	CommandManager_GetNodes_FullMethodName                 = "/tailsys.CommandManager/GetNodes"
+	CommandManager_SendCommandToNodes_FullMethodName       = "/tailsys.CommandManager/SendCommandToNodes"
+	CommandManager_SendCommandToNodesStream_FullMethodName = "/tailsys.CommandManager/SendCommandToNodesStream"
+)
+
+// CommandManagerClient is the client API for CommandManager service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type CommandManagerClient interface {
+	GetNodes(ctx context.Context, in *NodeQuery, opts ...grpc.CallOption) (*NodeQueryResponse, error)
+	SendCommandToNodes(ctx context.Context, in *CommanderRequest, opts ...grpc.CallOption) (*AggregateResponses, error)
+	SendCommandToNodesStream(ctx context.Context, in *CommanderRequest, opts ...grpc.CallOption) (CommandManager_SendCommandToNodesStreamClient, error)
+}
+
+type commandManagerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewCommandManagerClient(cc grpc.ClientConnInterface) CommandManagerClient {
+	return &commandManagerClient{cc}
+}
+
+func (c *commandManagerClient) GetNodes(ctx context.Context, in *NodeQuery, opts ...grpc.CallOption) (*NodeQueryResponse, error) {
+	out := new(NodeQueryResponse)
+	err := c.cc.Invoke(ctx, CommandManager_GetNodes_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *commandManagerClient) SendCommandToNodes(ctx context.Context, in *CommanderRequest, opts ...grpc.CallOption) (*AggregateResponses, error) {
+	out := new(AggregateResponses)
+	err := c.cc.Invoke(ctx, CommandManager_SendCommandToNodes_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *commandManagerClient) SendCommandToNodesStream(ctx context.Context, in *CommanderRequest, opts ...grpc.CallOption) (CommandManager_SendCommandToNodesStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &CommandManager_ServiceDesc.Streams[0], CommandManager_SendCommandToNodesStream_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &commandManagerSendCommandToNodesStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type CommandManager_SendCommandToNodesStreamClient interface {
+	Recv() (*CommandResponse, error)
+	grpc.ClientStream
+}
+
+type commandManagerSendCommandToNodesStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *commandManagerSendCommandToNodesStreamClient) Recv() (*CommandResponse, error) {
+	m := new(CommandResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// CommandManagerServer is the server API for CommandManager service.
+// All implementations must embed UnimplementedCommandManagerServer
+// for forward compatibility
+type CommandManagerServer interface {
+	GetNodes(context.Context, *NodeQuery) (*NodeQueryResponse, error)
+	SendCommandToNodes(context.Context, *CommanderRequest) (*AggregateResponses, error)
+	SendCommandToNodesStream(*CommanderRequest, CommandManager_SendCommandToNodesStreamServer) error
+	mustEmbedUnimplementedCommandManagerServer()
+}
+
+// UnimplementedCommandManagerServer must be embedded to have forward compatible implementations.
+type UnimplementedCommandManagerServer struct {
+}
+
+func (UnimplementedCommandManagerServer) GetNodes(context.Context, *NodeQuery) (*NodeQueryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNodes not implemented")
+}
+func (UnimplementedCommandManagerServer) SendCommandToNodes(context.Context, *CommanderRequest) (*AggregateResponses, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendCommandToNodes not implemented")
+}
+func (UnimplementedCommandManagerServer) SendCommandToNodesStream(*CommanderRequest, CommandManager_SendCommandToNodesStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method SendCommandToNodesStream not implemented")
+}
+func (UnimplementedCommandManagerServer) mustEmbedUnimplementedCommandManagerServer() {}
+
+// UnsafeCommandManagerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CommandManagerServer will
+// result in compilation errors.
+type UnsafeCommandManagerServer interface {
+	mustEmbedUnimplementedCommandManagerServer()
+}
+
+func RegisterCommandManagerServer(s grpc.ServiceRegistrar, srv CommandManagerServer) {
+	s.RegisterService(&CommandManager_ServiceDesc, srv)
+}
+
+func _CommandManager_GetNodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NodeQuery)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommandManagerServer).GetNodes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommandManager_GetNodes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommandManagerServer).GetNodes(ctx, req.(*NodeQuery))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CommandManager_SendCommandToNodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommanderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommandManagerServer).SendCommandToNodes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommandManager_SendCommandToNodes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommandManagerServer).SendCommandToNodes(ctx, req.(*CommanderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CommandManager_SendCommandToNodesStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CommanderRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(CommandManagerServer).SendCommandToNodesStream(m, &commandManagerSendCommandToNodesStreamServer{stream})
+}
+
+type CommandManager_SendCommandToNodesStreamServer interface {
+	Send(*CommandResponse) error
+	grpc.ServerStream
+}
+
+type commandManagerSendCommandToNodesStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *commandManagerSendCommandToNodesStreamServer) Send(m *CommandResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+// CommandManager_ServiceDesc is the grpc.ServiceDesc for CommandManager service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var CommandManager_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "tailsys.CommandManager",
+	HandlerType: (*CommandManagerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetNodes",
+			Handler:    _CommandManager_GetNodes_Handler,
+		},
+		{
+			MethodName: "SendCommandToNodes",
+			Handler:    _CommandManager_SendCommandToNodes_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SendCommandToNodesStream",
+			Handler:       _CommandManager_SendCommandToNodesStream_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "command.proto",
 }

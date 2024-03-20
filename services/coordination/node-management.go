@@ -28,7 +28,7 @@ func (r *RegistrationServer) createRegistration(nrr *pb.NodeRegistrationRequest)
 
 	clientName := nrr.GetInfo().Hostname
 
-	nhr := &queries.RegisteredHostsRow{
+	nhr := &queries.RegisteredHostsData{
 		Hostname: nrr.GetInfo().Hostname,
 		Key:      nrr.GetKey().Key,
 		Data:     data,

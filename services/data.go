@@ -14,12 +14,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// func init() {
-//   database.Register("sqlite3", &DataManagement{})
-// }
-
-const schemaVersion = 1
-
 type DataManagement struct {
 	DB             *sql.DB
 	isLocked       atomic.Bool

@@ -35,6 +35,7 @@ func (co *Coordinator) NewCoordinator(ctx context.Context, opts ...Option) error
 			return err
 		}
 	}
+  co.ID = uuid.NewString()
 	return nil
 }
 
@@ -62,8 +63,15 @@ func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
 		DB:       co.DB,
 		Hostname: co.Hostname,
 		//TODO: This is randomized on startup, we should persist and load
-		ID: uuid.NewString(),
+		ID: co.ID,
 	})
+
+  pb.RegisterCommandManagerServer(co.GRPCServer, &CommanderServer{
+    DB: co.DB,
+    CO: co,
+    ID: co.ID,
+  })
+
 	fmt.Println("rpc server starting to serve traffic")
 	co.StartPingService(ctx)
 	return co.GRPCServer.Serve(co.Listener)
@@ -81,6 +89,7 @@ func (co *Coordinator) pingNodes(ctx context.Context, limit int) {
 
 	//Fill the semaphore pool
 	sem := make(chan struct{}, limit)
+  defer close(sem)
 
 	fmt.Println("starting ping ticker")
 	ticker := time.NewTicker(time.Second * 15)
@@ -100,7 +109,7 @@ func (co *Coordinator) pingNodes(ctx context.Context, limit int) {
 	}
 }
 
-func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *queries.RegisteredHostsRow) {
+func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *queries.RegisteredHostsData) {
 	defer func() { <-sem }() //make space in sem
 
 	var node pb.NodeRegistrationRequest
@@ -145,7 +154,7 @@ func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *que
 		fmt.Println("unable to marshal registration proto")
 	}
 
-	err = queries.UpdateRegisteredHost(co.DB, &queries.RegisteredHostsRow{
+	err = queries.UpdateRegisteredHost(co.DB, &queries.RegisteredHostsData {
 		Hostname: host,
 		Key:      node.GetKey().Key,
 		Data:     data,

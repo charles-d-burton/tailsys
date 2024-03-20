@@ -11,15 +11,15 @@ message CommandRequest {
   Key key = 3;
 }
 
-message CommandResonse {
-  google.protobuf.Timestamp ran = 1;
+message CommandResponse {
+  google.protobuf.Timestamp timestamp = 1;
   bool successful = 2;
   bytes output = 3;
   int32 exitCode = 4;
 }
 
 service CommandRunner {
-  rpc Command(CommandRequest) returns (CommandResonse) {} 
+  rpc Command(CommandRequest) returns (CommandResponse) {}; 
 }
 
 message NodeQuery {
@@ -27,6 +27,22 @@ message NodeQuery {
   Key key = 2;
 }
 
-// service CommandGetNodes {
-//   rpc returns 
-// }
+message NodeQueryResponse {
+  repeated string nodes = 1;
+}
+
+message AggregateResponses {
+  repeated CommandResponse response = 1;
+}
+
+message CommanderRequest {
+  string pattern = 1;
+  string command = 2;
+}
+
+service CommandManager {
+  rpc GetNodes(NodeQuery) returns(NodeQueryResponse) {};
+  rpc SendCommandToNodes(CommanderRequest) returns(AggregateResponses) {};
+  rpc SendCommandToNodesStream(CommanderRequest) returns(stream CommandResponse) {};
+}
+
