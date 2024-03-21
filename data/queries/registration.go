@@ -23,7 +23,7 @@ type RegisteredHostsData struct {
 }
 
 func GetMatchRegisteredHosts(db *sql.DB, pattern string) (chan *RegisteredHostsData, error) {
-	rchan := make(chan *RegisteredHostsData, 10)
+	rchan := make(chan *RegisteredHostsData, 1000)
 
   re, err := regexp.Compile(pattern)
   if err != nil {

@@ -82,9 +82,9 @@ func (co *Coordinator) StartPingService(ctx context.Context) {
 	go co.pingNodes(ctx, 10)
 }
 
-func (co *Coordinator) pingNodes(ctx context.Context, limit int) {
+func (co *Coordinator) pingNodes(ctx context.Context, limit uint16) {
 	if limit < 1 {
-		limit = 10
+		limit = 50
 	}
 
 	//Fill the semaphore pool
