@@ -7,7 +7,7 @@ import (
 
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/data/queries"
-  "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // RegistrationServer struct to contain proto for gRPC

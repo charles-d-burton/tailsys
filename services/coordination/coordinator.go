@@ -3,8 +3,8 @@ package coordination
 import (
 	"context"
 	"errors"
-	"fmt" 
-  "time"
+	"fmt"
+	"time"
 
 	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/connections"
@@ -35,7 +35,7 @@ func (co *Coordinator) NewCoordinator(ctx context.Context, opts ...Option) error
 			return err
 		}
 	}
-  co.ID = uuid.NewString()
+	co.ID = uuid.NewString()
 	return nil
 }
 
@@ -49,7 +49,7 @@ func (co *Coordinator) WithDevMode(mode bool) Option {
 }
 
 func (co *Coordinator) StartDatabase(ctx context.Context) error {
-  return co.StartDB(co.ConfigDir)
+	return co.StartDB(co.ConfigDir)
 }
 
 // StartRPCCoordinationServer Register the gRPC server endpoints and start the server
@@ -66,11 +66,11 @@ func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
 		ID: co.ID,
 	})
 
-  pb.RegisterCommandManagerServer(co.GRPCServer, &CommanderServer{
-    DB: co.DB,
-    CO: co,
-    ID: co.ID,
-  })
+	pb.RegisterCommandManagerServer(co.GRPCServer, &CommanderServer{
+		DB: co.DB,
+		CO: co,
+		ID: co.ID,
+	})
 
 	fmt.Println("rpc server starting to serve traffic")
 	co.StartPingService(ctx)
@@ -89,7 +89,7 @@ func (co *Coordinator) pingNodes(ctx context.Context, limit uint16) {
 
 	//Fill the semaphore pool
 	sem := make(chan struct{}, limit)
-  defer close(sem)
+	defer close(sem)
 
 	fmt.Println("starting ping ticker")
 	ticker := time.NewTicker(time.Second * 15)
@@ -129,7 +129,7 @@ func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *que
 	host := hostRow.Hostname
 	ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
-  conn, err := co.DialContext(ctxTo, host+":"+node.Info.Port, &connections.TLSConfig{TLSKey: node.Tlskey, TLSCert: node.Tlscert})
+	conn, err := co.DialContext(ctxTo, host+":"+node.Info.Port, &connections.TLSConfig{TLSKey: node.Tlskey, TLSCert: node.Tlscert})
 	//TODO: Probably need to set the tailnet fqdn at some point
 	defer conn.Close()
 
@@ -154,7 +154,7 @@ func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *que
 		fmt.Println("unable to marshal registration proto")
 	}
 
-	err = queries.UpdateRegisteredHost(co.DB, &queries.RegisteredHostsData {
+	err = queries.UpdateRegisteredHost(co.DB, &queries.RegisteredHostsData{
 		Hostname: host,
 		Key:      node.GetKey().Key,
 		Data:     data,

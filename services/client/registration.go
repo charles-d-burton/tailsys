@@ -11,7 +11,7 @@ import (
 	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/data/queries"
 	"google.golang.org/protobuf/types/known/timestamppb"
-  "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 )
 
 // RegisterWithCoordinationServer generate the registration request and send it to the coordination server
@@ -20,12 +20,12 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 		fmt.Println("coordination server address: ", addr)
 		ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
 		defer cancel()
-    sconfig, err := cl.getTlSConfig()
-    if err != nil {
-      return err
-    }
+		sconfig, err := cl.getTlSConfig()
+		if err != nil {
+			return err
+		}
 
-    conn, err := cl.DialContext(ctxTo, addr, sconfig)
+		conn, err := cl.DialContext(ctxTo, addr, sconfig)
 		if err != nil {
 			return err
 		}
@@ -39,15 +39,15 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 		req := &pb.NodeRegistrationRequest{
 			Info: &pb.SysInfo{
 				Hostname: cl.Hostname,
-        Port: cl.Port,
+				Port:     cl.Port,
 				Type:     pb.OSType_LINUX,
 				Ip:       cl.Hostname,
 				LastSeen: timestamppb.Now(),
 			},
 			Key:        &pb.Key{Key: cl.ID},
 			SystemType: pb.SystemType_CLIENT,
-      Tlskey: cl.TLSConfig.TLSKey,
-      Tlscert: cl.TLSConfig.TLSCert,
+			Tlskey:     cl.TLSConfig.TLSKey,
+			Tlscert:    cl.TLSConfig.TLSCert,
 		}
 		fmt.Println(req)
 		r, err := c.Register(ctx, req)
@@ -73,17 +73,17 @@ func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr strin
 }
 
 func (cl *Client) getTlSConfig() (*connections.TLSConfig, error) {
-  config := connections.TLSConfig{}
-  cfile, err := os.ReadFile(cl.ConfigDir + "/certs/server-config.yaml")
-  if err != nil {
-    return nil, fmt.Errorf("could not find server certs at: %s with err: %w", cl.ConfigDir + "/certs/server-config.yaml", err)
-  }
+	config := connections.TLSConfig{}
+	cfile, err := os.ReadFile(cl.ConfigDir + "/certs/server-config.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("could not find server certs at: %s with err: %w", cl.ConfigDir+"/certs/server-config.yaml", err)
+	}
 
-  err = yaml.Unmarshal(cfile, &config)
-  if err != nil {
-    return nil, err
-  }
-  return &config, nil
+	err = yaml.Unmarshal(cfile, &config)
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 func (cl *Client) addRegistration(r *pb.NodeRegistrationResponse) error {

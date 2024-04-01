@@ -23,7 +23,7 @@ type DataManagement struct {
 }
 
 func (dm *DataManagement) StartDB(dir string) error {
-  dbDir := dir + "/db"
+	dbDir := dir + "/db"
 	fmt.Println("creating database at: ", dbDir)
 	// if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 	//   return err

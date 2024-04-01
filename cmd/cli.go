@@ -8,12 +8,12 @@ import (
 	"strings"
 
 	"github.com/charles-d-burton/tailsys/services/client"
+	"github.com/charles-d-burton/tailsys/services/commander"
 	"github.com/charles-d-burton/tailsys/services/coordination"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
-
 func initConfig(cmd *cobra.Command) error {
 	v := viper.New()
 	if Check() {
@@ -74,12 +74,12 @@ func bindFlags(cmd *cobra.Command, v *viper.Viper) {
 }
 
 type GlobalFlags struct {
-	ClientId      string
-	ClientSecret  string
-	AuthKey       string
-	Port          string
-	Hostname      string
-	Verbose       bool
+	ClientId        string
+	ClientSecret    string
+	AuthKey         string
+	Port            string
+	Hostname        string
+	Verbose         bool
 	ConfigDirectory string
 }
 
@@ -116,7 +116,7 @@ func rootCommand() *cobra.Command {
 
 	rootCmd.AddCommand(coodinationServerCommand())
 	rootCmd.AddCommand(clientCommand())
-	rootCmd.AddCommand(interactiveCommand())
+	//	rootCmd.AddCommand(interactiveCommand())
 	rootCmd.AddCommand(noninteractiveCommand())
 
 	return rootCmd
@@ -157,14 +157,14 @@ func coodinationServerCommand() *cobra.Command {
 				co.WithTags("tag:tailsys"),
 				co.WithScopes("devices", "logs:read", "routes:read"),
 				co.WithPort(gf.Port),
-        co.WithConfigDir(gf.ConfigDirectory),
+				co.WithConfigDir(gf.ConfigDirectory),
 			); err != nil {
 				return err
 			}
-      err = co.StartDatabase(ctx)
-      if err != nil {
-        return err
-      }
+			err = co.StartDatabase(ctx)
+			if err != nil {
+				return err
+			}
 			return co.StartRPCCoordinationServer(ctx)
 		},
 	}
@@ -204,15 +204,15 @@ func clientCommand() *cobra.Command {
 				cl.WithTags("tag:tailsys"),
 				cl.WithScopes("devices", "logs:read", "routes:read"),
 				cl.WithPort(gf.Port),
-        cl.WithConfigDir(gf.ConfigDirectory),
+				cl.WithConfigDir(gf.ConfigDirectory),
 			); err != nil {
 				return err
 			}
 			fmt.Println("registered, starting client operations")
-      err = cl.StartDatabase(ctx)
-      if err != nil {
-        return err
-      }
+			err = cl.StartDatabase(ctx)
+			if err != nil {
+				return err
+			}
 			fmt.Println("connected, registering with coordination server")
 			if err := cl.RegisterWithCoordinationServer(ctx, coServer); err != nil {
 				return err
@@ -226,27 +226,118 @@ func clientCommand() *cobra.Command {
 	return ccmd
 }
 
-func interactiveCommand() *cobra.Command {
-	ccmd := &cobra.Command{
-		Use:     "interactive",
-		Aliases: []string{"i"},
-		Short:   "Start the application interactive ui",
-		Run: func(ccmd *cobra.Command, args []string) {
+// func interactiveCommand() *cobra.Command {
+// 	ccmd := &cobra.Command{
+// 		Use:     "interactive",
+// 		Aliases: []string{"i"},
+// 		Short:   "Start the application interactive ui",
+// 		Run: func(ccmd *cobra.Command, args []string) {
 
+// 		},
+// 	}
+// 	return ccmd
+// }
+
+type cmdFlags struct {
+	Cmd                string
+	Pattern            string
+	CoordinationServer string
+}
+
+var cmdf = cmdFlags{}
+
+func noninteractiveCommand() *cobra.Command {
+	ccmd := &cobra.Command{
+		Use:     "cmd",
+		Aliases: []string{"cmd"},
+		Short:   "Start the command non-interactively",
+		// Run: func(ccmd *cobra.Command, args []string) {
+		// 	fmt.Println("starting the non-interactive code")
+  //     fmt.Println("coordination-server: ", cmdf.CoordinationServer)
+		// },
+	}
+	ccmd.PersistentFlags().StringVar(&cmdf.CoordinationServer, "coordination-server", "", "Hostname of the coordination server")
+	ccmd.PersistentFlags().StringVar(&cmdf.Pattern, "pattern", "p", "pattern of nodes to look up")
+  ccmd.MarkFlagRequired("pattern")
+
+  ccmd.AddCommand(getNodes())
+  ccmd.AddCommand(sendCommandToNodes())
+	return ccmd
+}
+
+func getNodes() *cobra.Command {
+	ccmd := &cobra.Command{
+		Use:     "get-nodes",
+		Aliases: []string{"gn"},
+		Short:   "Use a pattern to find nodes",
+		RunE: func(ccmd *cobra.Command, args []string) error {
+      fmt.Printf("getting nodes that match pattern: %s\n", cmdf.Pattern)
+      var client commander.Client
+      if err := client.NewClient(
+        ccmd.Context(),
+        client.WithCoordinationServer(cmdf.CoordinationServer),
+        ); err != nil {
+          return err
+        }
+
+			if err := client.ConnectCmd(ccmd.Context(),
+				client.WithAuthKey(gf.AuthKey),
+				client.WithOauth(gf.ClientId, gf.ClientSecret),
+				client.WithHostname(gf.Hostname),
+				client.WithTags("tag:tailsys"),
+				client.WithScopes("devices", "logs:read", "routes:read"),
+				client.WithPort(gf.Port),
+				client.WithConfigDir(gf.ConfigDirectory),
+			); err != nil {
+				return err
+			}
+
+      if err := client.GetNodes(ccmd.Context(), cmdf.Pattern); err != nil {
+        fmt.Println(fmt.Errorf("error getting nodes %w", err))
+      }
+      return nil
 		},
 	}
 	return ccmd
 }
 
-func noninteractiveCommand() *cobra.Command {
+func sendCommandToNodes() *cobra.Command {
 	ccmd := &cobra.Command{
-		Use:     "non-interactive",
-		Aliases: []string{"ni"},
-		Short:   "Start the command non-interactively",
-		Run: func(ccmd *cobra.Command, args []string) {
-			fmt.Println("starting the interactive code")
+		Use:     "send-command",
+		Aliases: []string{"sc"},
+		Short:   "Use a pattern to send command to nodes",
+		RunE: func(ccmd *cobra.Command, args []string) error {
+      fmt.Printf("sending command: %s\n that match pattern %s\n", cmdf.Cmd, cmdf.Pattern)
+      var client commander.Client
+      if err := client.NewClient(
+        ccmd.Context(),
+        client.WithCoordinationServer(cmdf.CoordinationServer),
+        ); err != nil {
+          return err
+        }
+
+			if err := client.ConnectCmd(ccmd.Context(),
+				client.WithAuthKey(gf.AuthKey),
+				client.WithOauth(gf.ClientId, gf.ClientSecret),
+				client.WithHostname(gf.Hostname),
+				client.WithTags("tag:tailsys"),
+				client.WithScopes("devices", "logs:read", "routes:read"),
+				client.WithPort(gf.Port),
+				client.WithConfigDir(gf.ConfigDirectory),
+			); err != nil {
+				return err
+			}
+
+      if err := client.SendCommand(ccmd.Context(), cmdf.Cmd, cmdf.Pattern); err != nil {
+        fmt.Println(fmt.Errorf("error getting nodes %w", err))
+      }
+
+      return nil
 		},
 	}
+  ccmd.Flags().StringVar(&cmdf.Cmd, "command", "c", "command to send to nodes")
+  ccmd.MarkFlagRequired("command")
+
 	return ccmd
 }
 

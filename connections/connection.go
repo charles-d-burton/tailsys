@@ -35,14 +35,14 @@ const (
 
 // Tailnet main struct to hold connection to the tailnet information
 type Tailnet struct {
-  ConfigDir string
+	ConfigDir      string
 	ClientID       string
 	ClientSecret   string
 	AuthKey        string
 	Hostname       string
 	Addr           string
 	Port           string
-  TLSConfig TLSConfig
+	TLSConfig      *TLSConfig
 	Scopes         []string
 	Tags           []string
 	Client         *tailscale.Client
@@ -54,8 +54,8 @@ type Tailnet struct {
 }
 
 type TLSConfig struct {
-  TLSKey         string `yaml:"key"`
-  TLSCert        string `yaml:"cert"`
+	TLSKey  string `yaml:"key"`
+	TLSCert string `yaml:"cert"`
 }
 
 // Option function to set different options on the tailnet config
@@ -70,9 +70,9 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 		}
 	}
 
-  if err := tn.generateKeyPair(); err != nil {
-    return err
-  }
+	if err := tn.generateKeyPair(); err != nil {
+		return err
+	}
 
 	if tn.Hostname == "" {
 		h, err := os.Hostname()
@@ -91,10 +91,10 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 		Hostname:  tn.Hostname,
 		AuthKey:   tn.AuthKey,
 		Ephemeral: true,
-		//TODO: this is erroring, I think it's a bug on the tailscale side
-		//    Logger: func(string, ...any) {},
+		Logf: nil, //func(string, ...any) {},
 	}
 	tn.TSServer = srv
+  tn.authType = tn.getAuthType()
 
 	err = tn.createRPCServer()
 	if err != nil {
@@ -104,32 +104,68 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 	return nil
 }
 
+//ConnectCmd setup the tailnet connection without starting the gRPC server
+func (tn *Tailnet) ConnectCmd(ctx context.Context, opts ...Option) error {
+	for _, opt := range opts {
+		err := opt(tn)
+		if err != nil {
+			return err
+		}
+	}
+
+	if tn.Hostname == "" {
+		h, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		tn.Hostname = h + "-tailsys"
+	}
+
+	err := tn.initClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	srv := &tsnet.Server{
+		Hostname:  tn.Hostname,
+		AuthKey:   tn.AuthKey,
+		Ephemeral: true,
+		// Logf: func(string, ...any) {},
+	}
+	tn.TSServer = srv
+  tn.authType = tn.getAuthType()
+
+	return nil
+}
+
 func (tn *Tailnet) DialContext(ctx context.Context, addr string, certs *TLSConfig) (*grpc.ClientConn, error) {
-  //Plain dialer if not on tsnet
-  //Pass in a cancelable context
-  pool := x509.NewCertPool()
-  pool.AppendCertsFromPEM([]byte(certs.TLSCert))
-  pair, err := tls.X509KeyPair([]byte(certs.TLSCert), []byte(certs.TLSKey))
-  if err != nil {
-    return nil, err
-  }
+	//Plain dialer if not on tsnet
+	//Pass in a cancelable context
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(certs.TLSCert))
+	pair, err := tls.X509KeyPair([]byte(certs.TLSCert), []byte(certs.TLSKey))
+	if err != nil {
+		return nil, err
+	}
 
-  tc := credentials.NewTLS(&tls.Config{
-    Certificates: []tls.Certificate{pair},
-    ClientAuth: tls.RequireAndVerifyClientCert,
-    ClientCAs: pool,
-    RootCAs: pool,
-  })
+	tc := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{pair},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    pool,
+		RootCAs:      pool,
+	})
 
-  if tn.authType == NONE {
-    conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(tc))
-    return conn, err
-  }
+	if tn.authType == NONE {
+    fmt.Printf("dialing %s with no tailscale configuration\n", addr)
+		conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(tc))
+		return conn, err
+	}
 
+  fmt.Printf("dialing %s with tailscale configuration\n", addr)
 	return grpc.DialContext(ctx, addr,
 		grpc.WithTransportCredentials(tc),
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return tn.TSServer.Dial(ctx, "-", addr)
+			return tn.TSServer.Dial(ctx, "tcp", addr)
 		}),
 	)
 }
@@ -195,60 +231,60 @@ func (tn *Tailnet) reapDeviceID(ctx context.Context) error {
 }
 
 func (tn *Tailnet) generateKeyPair() error {
-  if !tn.checkForKeys() {
-    fmt.Println("no keys found, generating new keys")
-    priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-    if err != nil {
-      return err
-    }
-    privDer, err := x509.MarshalPKCS8PrivateKey(priv)
-    if err != nil {
-      return err
-    }
-    privPem := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDer})
+	if !tn.checkForKeys() {
+		fmt.Println("no keys found, generating new keys")
+		priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return err
+		}
+		privDer, err := x509.MarshalPKCS8PrivateKey(priv)
+		if err != nil {
+			return err
+		}
+		privPem := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDer})
 
-    template := &x509.Certificate{
-      SerialNumber: new(big.Int),
-      NotAfter: time.Now().Add(time.Hour * 87660), //Ten years
-      DNSNames: []string{tn.Hostname},
-    }
+		template := &x509.Certificate{
+			SerialNumber: new(big.Int),
+			NotAfter:     time.Now().Add(time.Hour * 87660), //Ten years
+			DNSNames:     []string{tn.Hostname},
+		}
 
-    certDer, err := x509.CreateCertificate(rand.Reader, template, template, priv.Public(), priv)
-    if err != nil {
-      return err
-    }
-    certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDer})
-    tc := TLSConfig{}
-    tc.TLSCert = string(certPem)
-    tc.TLSKey = string(privPem)
-    
-    d, err := yaml.Marshal(&tc)
-    if err != nil {
-      return err
-    }
-    err = os.MkdirAll(tn.ConfigDir + "/certs", 0750)
-    err = os.WriteFile(tn.ConfigDir + "/certs/certs.yaml", d, 0640)
-    if err != nil {
-      return err
-    }
-    tn.TLSConfig = tc 
+		certDer, err := x509.CreateCertificate(rand.Reader, template, template, priv.Public(), priv)
+		if err != nil {
+			return err
+		}
+		certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDer})
+		tc := TLSConfig{}
+		tc.TLSCert = string(certPem)
+		tc.TLSKey = string(privPem)
 
-  }
-  return nil
+		d, err := yaml.Marshal(&tc)
+		if err != nil {
+			return err
+		}
+		err = os.MkdirAll(tn.ConfigDir+"/certs", 0750)
+		err = os.WriteFile(tn.ConfigDir+"/certs/certs.yaml", d, 0640)
+		if err != nil {
+			return err
+		}
+		tn.TLSConfig = &tc
+
+	}
+	return nil
 }
 
 func (tn *Tailnet) checkForKeys() bool {
-  tc := TLSConfig{}
-  c, err := os.ReadFile(tn.ConfigDir + "/certs/certs.yaml")
-  if err != nil {
-    return false
-  }
-  err = yaml.Unmarshal(c, &tc)
-  if err != nil {
-    return false
-  }
-  tn.TLSConfig = tc
-  return true
+	tc := TLSConfig{}
+	c, err := os.ReadFile(tn.ConfigDir + "/certs/certs.yaml")
+	if err != nil {
+		return false
+	}
+	err = yaml.Unmarshal(c, &tc)
+	if err != nil {
+		return false
+	}
+	tn.TLSConfig = &tc
+	return true
 }
 
 // GetDevices returns a list of devices that are connected to the configured tailnet
@@ -306,7 +342,7 @@ func (tn *Tailnet) WithTags(tags ...string) Option {
 	}
 }
 
-//WithHostname Override the hostname on the tailnet
+// WithHostname Override the hostname on the tailnet
 func (tn *Tailnet) WithHostname(hostname string) Option {
 	return func(tn *Tailnet) error {
 		if hostname == "" {
@@ -322,7 +358,7 @@ func (tn *Tailnet) WithHostname(hostname string) Option {
 	}
 }
 
-//WithTailnetLogging Enable/Disable logging on the tailnet
+// WithTailnetLogging Enable/Disable logging on the tailnet
 func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	return func(tn *Tailnet) error {
 		tn.TailnetLogging = enabled
@@ -330,7 +366,7 @@ func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	}
 }
 
-//WithPort Port to bind the grpc server to
+// WithPort Port to bind the grpc server to
 func (tn *Tailnet) WithPort(port string) Option {
 	return func(tn *Tailnet) error {
 		tn.Port = port
@@ -339,13 +375,14 @@ func (tn *Tailnet) WithPort(port string) Option {
 }
 
 func (tn *Tailnet) WithConfigDir(dir string) Option {
-  return func(tn *Tailnet) error {
-    tn.ConfigDir = dir
-    return nil
-  }
+	return func(tn *Tailnet) error {
+		tn.ConfigDir = dir
+    fmt.Println("set config dir to: ", tn.ConfigDir)
+		return nil
+	}
 }
 
-//createRPCServer create and start the gRPC server
+// createRPCServer create and start the gRPC server
 func (tn *Tailnet) createRPCServer() error {
 
 	if tn.authType != NONE {
@@ -371,18 +408,18 @@ func (tn *Tailnet) createRPCServer() error {
 		tn.Listener = ln
 	}
 
-  pool := x509.NewCertPool()
-  pool.AppendCertsFromPEM([]byte(tn.TLSConfig.TLSCert))
-  pair, err := tls.X509KeyPair([]byte(tn.TLSConfig.TLSCert), []byte(tn.TLSConfig.TLSKey))
-  if err != nil {
-    return err
-  }
-  tc := credentials.NewTLS(&tls.Config{
-    Certificates: []tls.Certificate{pair},
-    ClientAuth: tls.RequireAndVerifyClientCert,
-    ClientCAs: pool,
-    RootCAs: pool,
-  })
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(tn.TLSConfig.TLSCert))
+	pair, err := tls.X509KeyPair([]byte(tn.TLSConfig.TLSCert), []byte(tn.TLSConfig.TLSKey))
+	if err != nil {
+		return err
+	}
+	tc := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{pair},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    pool,
+		RootCAs:      pool,
+	})
 
 	s := grpc.NewServer(grpc.Creds(tc))
 	tn.GRPCServer = s
@@ -390,16 +427,18 @@ func (tn *Tailnet) createRPCServer() error {
 	return nil
 }
 
-//getAuthType Determine the type of auth to connect to the tailnet
+// getAuthType Determine the type of auth to connect to the tailnet
 func (tn *Tailnet) getAuthType() AuthType {
 	if tn.ClientID != "" && tn.ClientSecret != "" {
+    fmt.Println("auth type is OAUTH")
 		return OAUTH
 	}
 
 	if tn.AuthKey != "" {
+    fmt.Println("auth type is AUTHKEY")
 		return AUTHKEY
 
 	}
+  fmt.Println("auth type is NONE")
 	return NONE
 }
-

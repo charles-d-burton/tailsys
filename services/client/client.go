@@ -12,7 +12,7 @@ import (
 )
 
 type Client struct {
-  services.DataManagement
+	services.DataManagement
 	connections.Tailnet
 	ID string
 }
@@ -28,11 +28,11 @@ func (cl *Client) NewClient(ctx context.Context, opts ...Option) error {
 	}
 
 	cl.ID = uuid.NewString()
-  return nil
+	return nil
 }
 
 func (cl *Client) StartDatabase(ctx context.Context) error {
-  return cl.StartDB(cl.ConfigDir)
+	return cl.StartDB(cl.ConfigDir)
 }
 
 func (cl *Client) StartRPCClientMode(ctx context.Context) error {
