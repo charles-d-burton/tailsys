@@ -12,13 +12,12 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/tailscale/tailscale-client-go/tailscale"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"gopkg.in/yaml.v3"
 	"tailscale.com/tsnet"
 )
@@ -47,7 +46,7 @@ type Tailnet struct {
 	Tags           []string
 	Client         *tailscale.Client
 	TSServer       *tsnet.Server
-	GRPCServer     *grpc.Server
+	HTTPServer     *http.Server
 	Listener       net.Listener
 	TailnetLogging bool
 	authType       AuthType
@@ -96,7 +95,7 @@ func (tn *Tailnet) Connect(ctx context.Context, opts ...Option) error {
 	tn.TSServer = srv
   tn.authType = tn.getAuthType()
 
-	err = tn.createRPCServer()
+	err = tn.createHTTPServer()
 	if err != nil {
 		return err
 	}
@@ -138,9 +137,7 @@ func (tn *Tailnet) ConnectCmd(ctx context.Context, opts ...Option) error {
 	return nil
 }
 
-func (tn *Tailnet) DialContext(ctx context.Context, addr string, certs *TLSConfig) (*grpc.ClientConn, error) {
-	//Plain dialer if not on tsnet
-	//Pass in a cancelable context
+func (tn *Tailnet) HTTPClient(certs *TLSConfig) (*http.Client, error) {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(certs.TLSCert))
 	pair, err := tls.X509KeyPair([]byte(certs.TLSCert), []byte(certs.TLSKey))
@@ -148,26 +145,25 @@ func (tn *Tailnet) DialContext(ctx context.Context, addr string, certs *TLSConfi
 		return nil, err
 	}
 
-	tc := credentials.NewTLS(&tls.Config{
+	tc := &tls.Config{
 		Certificates: []tls.Certificate{pair},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    pool,
 		RootCAs:      pool,
-	})
-
-	if tn.authType == NONE {
-    fmt.Printf("dialing %s with no tailscale configuration\n", addr)
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(tc))
-		return conn, err
+		InsecureSkipVerify: true, // Self-signed over Tailscale
 	}
 
-  fmt.Printf("dialing %s with tailscale configuration\n", addr)
-	return grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(tc),
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+	tr := &http.Transport{
+		TLSClientConfig: tc,
+	}
+
+	if tn.authType != NONE {
+		tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return tn.TSServer.Dial(ctx, "tcp", addr)
-		}),
-	)
+		}
+	}
+
+	return &http.Client{Transport: tr}, nil
 }
 
 func (tn *Tailnet) initClient(ctx context.Context) error {
@@ -366,7 +362,7 @@ func (tn *Tailnet) WithTailnetLogging(enabled bool) Option {
 	}
 }
 
-// WithPort Port to bind the grpc server to
+// WithPort Port to bind the HTTP server to
 func (tn *Tailnet) WithPort(port string) Option {
 	return func(tn *Tailnet) error {
 		tn.Port = port
@@ -382,8 +378,8 @@ func (tn *Tailnet) WithConfigDir(dir string) Option {
 	}
 }
 
-// createRPCServer create and start the gRPC server
-func (tn *Tailnet) createRPCServer() error {
+// createHTTPServer create and start the HTTP server
+func (tn *Tailnet) createHTTPServer() error {
 
 	if tn.authType != NONE {
 		if err := tn.TSServer.Start(); err != nil {
@@ -414,15 +410,16 @@ func (tn *Tailnet) createRPCServer() error {
 	if err != nil {
 		return err
 	}
-	tc := credentials.NewTLS(&tls.Config{
+	tc := &tls.Config{
 		Certificates: []tls.Certificate{pair},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    pool,
-		RootCAs:      pool,
-	})
+	}
 
-	s := grpc.NewServer(grpc.Creds(tc))
-	tn.GRPCServer = s
+	tn.HTTPServer = &http.Server{
+		TLSConfig: tc,
+	}
+	tn.Listener = tls.NewListener(tn.Listener, tc)
 
 	return nil
 }

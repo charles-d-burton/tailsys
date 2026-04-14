@@ -1,64 +1,71 @@
 package coordination
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 
-	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/data/queries"
-	"google.golang.org/protobuf/proto"
+	"github.com/charles-d-burton/tailsys/models"
+	"gopkg.in/yaml.v3"
 )
 
-// RegistrationServer struct to contain proto for gRPC
+// RegistrationServer struct to contain info for HTTP
 type RegistrationServer struct {
-	pb.UnimplementedRegistrationServer
 	DevMode  bool
 	ID       string
 	Hostname string
 	DB       *sql.DB
 }
 
-func (r *RegistrationServer) createRegistration(nrr *pb.NodeRegistrationRequest) error {
+func (rs *RegistrationServer) createRegistration(nrr *models.NodeRegistrationRequest) error {
 
-	data, err := proto.Marshal(nrr)
+	data, err := yaml.Marshal(nrr)
 	if err != nil {
 		return err
 	}
 
-	clientName := nrr.GetInfo().Hostname
+	clientName := nrr.Info.Hostname
 
 	nhr := &queries.RegisteredHostsData{
-		Hostname: nrr.GetInfo().Hostname,
-		Key:      nrr.GetKey().Key,
+		Hostname: nrr.Info.Hostname,
+		Key:      nrr.Key.Key,
 		Data:     data,
 	}
 	// clientKey := nrr.Key.GetKey()
 	fmt.Printf("registering %s\n", clientName)
-	err = queries.InsertHostRegistration(r.DB, nhr)
+	err = queries.InsertHostRegistration(rs.DB, nhr)
 
 	if err != nil {
-		fmt.Println("could not create bucket")
+		fmt.Println("could not create registration in database")
 		return err
 	}
 	return nil
 }
 
-// Register registers a node with the database when a node sends a request.  Returns the server id so the node can verify further requests
-func (r *RegistrationServer) Register(ctx context.Context, in *pb.NodeRegistrationRequest) (*pb.NodeRegistrationResponse, error) {
-	fmt.Println("received coordination request")
-	fmt.Println(in)
-	in.Accepted = r.DevMode
-	if r.DevMode {
-		fmt.Println("running in dev mode, accepting all incoming connections")
-	}
-	if err := r.createRegistration(in); err != nil {
-		return nil, err
+// Register registers a node with the database when a node sends a request. Returns the server id so the node can verify further requests
+func (rs *RegistrationServer) Register(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("received coordination registration request")
+	var in models.NodeRegistrationRequest
+	if err := models.ReadYAML(r, &in); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	return &pb.NodeRegistrationResponse{
-		Accepted: r.DevMode,
-		Key:      &pb.Key{Key: r.ID},
-		Hostname: r.Hostname,
-	}, nil
+	fmt.Println(&in)
+	in.Accepted = rs.DevMode
+	if rs.DevMode {
+		fmt.Println("running in dev mode, accepting all incoming connections")
+	}
+	if err := rs.createRegistration(&in); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	out := models.NodeRegistrationResponse{
+		Accepted: rs.DevMode,
+		Key:      models.Key{Key: rs.ID},
+		Hostname: rs.Hostname,
+	}
+	models.WriteYAML(w, http.StatusOK, out)
 }

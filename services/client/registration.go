@@ -1,16 +1,16 @@
 package client
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
-	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/data/queries"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"github.com/charles-d-burton/tailsys/models"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,51 +18,71 @@ import (
 func (cl *Client) RegisterWithCoordinationServer(ctx context.Context, addr string) error {
 	for i := 0; i < 5; i++ {
 		fmt.Println("coordination server address: ", addr)
-		ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
+		ctxTo, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		sconfig, err := cl.getTlSConfig()
 		if err != nil {
 			return err
 		}
 
-		conn, err := cl.DialContext(ctxTo, addr, sconfig)
+		client, err := cl.HTTPClient(sconfig)
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
-
-		c := pb.NewRegistrationClient(conn)
 
 		fmt.Println("attempting to send registration request")
-		fmt.Println(conn.GetState())
 
-		req := &pb.NodeRegistrationRequest{
-			Info: &pb.SysInfo{
+		req := models.NodeRegistrationRequest{
+			Info: models.SysInfo{
 				Hostname: cl.Hostname,
 				Port:     cl.Port,
-				Type:     pb.OSType_LINUX,
-				Ip:       cl.Hostname,
-				LastSeen: timestamppb.Now(),
+				Type:     models.LINUX,
+				IP:       cl.Hostname,
+				LastSeen: time.Now(),
 			},
-			Key:        &pb.Key{Key: cl.ID},
-			SystemType: pb.SystemType_CLIENT,
-			Tlskey:     cl.TLSConfig.TLSKey,
-			Tlscert:    cl.TLSConfig.TLSCert,
+			Key:        models.Key{Key: cl.ID},
+			SystemType: models.CLIENT,
+			TLSKey:     cl.TLSConfig.TLSKey,
+			TLSCert:    cl.TLSConfig.TLSCert,
 		}
 		fmt.Println(req)
-		r, err := c.Register(ctx, req)
 
+		data, err := yaml.Marshal(req)
+		if err != nil {
+			return err
+		}
+
+		url := fmt.Sprintf("https://%s/register", addr)
+		hreq, err := http.NewRequestWithContext(ctxTo, "POST", url, bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
+		hreq.Header.Set("Content-Type", "application/x-yaml")
+
+		resp, err := client.Do(hreq)
 		if err != nil {
 			fmt.Println(err)
 			time.Sleep(3 * time.Second)
 			if i == 4 {
-				return errors.New(fmt.Sprintf("unable to connect to coordation server: %s", addr))
+				return fmt.Errorf("unable to connect to coordination server: %s", addr)
 			}
 			continue
 		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("received non-200 response: %d\n", resp.StatusCode)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+
+		var r models.NodeRegistrationResponse
+		if err := yaml.NewDecoder(resp.Body).Decode(&r); err != nil {
+			return err
+		}
 
 		fmt.Println("registering response")
-		err = cl.addRegistration(r)
+		err = cl.addRegistration(&r)
 		if err != nil {
 			return err
 		}
@@ -86,9 +106,9 @@ func (cl *Client) getTlSConfig() (*connections.TLSConfig, error) {
 	return &config, nil
 }
 
-func (cl *Client) addRegistration(r *pb.NodeRegistrationResponse) error {
+func (cl *Client) addRegistration(r *models.NodeRegistrationResponse) error {
 	fmt.Println("registering server")
-	err := queries.SetRegisteredCoordinationServer(cl.DB, r.GetHostname(), r.GetKey().Key)
+	err := queries.SetRegisteredCoordinationServer(cl.DB, r.Hostname, r.Key.Key)
 	if err != nil {
 		fmt.Println("could not register server")
 		return err

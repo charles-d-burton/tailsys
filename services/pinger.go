@@ -1,29 +1,34 @@
 package services
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"time"
 
-	pb "github.com/charles-d-burton/tailsys/commands"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"github.com/charles-d-burton/tailsys/models"
 )
 
 type Pinger struct {
-	pb.UnimplementedPingerServer
 	DB *sql.DB
 	ID string
 }
 
-// Ping GRPC service for the service to ping clients and provide response time
-func (p *Pinger) Ping(ctx context.Context, in *pb.PingRequest) (*pb.PongResponse, error) {
+// Ping HTTP service for the service to ping clients and provide response time
+func (p *Pinger) Ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("received ping request")
-	now := time.Now()
-	latency := now.Sub(in.Ping.AsTime())
+	var in models.PingRequest
+	if err := models.ReadYAML(r, &in); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	return &pb.PongResponse{
-		Ping:           timestamppb.New(now),
+	now := time.Now()
+	latency := now.Sub(in.Ping)
+
+	out := models.PongResponse{
+		Ping:           now,
 		InboundLatency: float32(latency.Milliseconds()),
-	}, nil
+	}
+	models.WriteYAML(w, http.StatusOK, out)
 }

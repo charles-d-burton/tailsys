@@ -105,7 +105,7 @@ func rootCommand() *cobra.Command {
 
 	rootCmd.PersistentFlags().StringVar(&gf.AuthKey, "auth-key", "", "Pre-generated tailscale auth key")
 	viper.BindPFlag("auth-key", rootCmd.PersistentFlags().Lookup("auth-key"))
-	rootCmd.PersistentFlags().StringVarP(&gf.Port, "port", "p", "6655", "gRPC Port to listen on")
+	rootCmd.PersistentFlags().StringVarP(&gf.Port, "port", "p", "6655", "HTTP Port to listen on")
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	rootCmd.PersistentFlags().StringVar(&gf.Hostname, "hostname", "", "Override hostname")
 	viper.BindPFlag("hostname", rootCmd.PersistentFlags().Lookup("hostname"))
@@ -165,7 +165,7 @@ func coodinationServerCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return co.StartRPCCoordinationServer(ctx)
+			return co.StartHTTPCoordinationServer(ctx)
 		},
 	}
 	ccmd.Flags().BoolVar(&cof.DevMode, "dev", false, "Enable dev mode, accept all incoming keys")
@@ -217,7 +217,7 @@ func clientCommand() *cobra.Command {
 			if err := cl.RegisterWithCoordinationServer(ctx, coServer); err != nil {
 				return err
 			}
-			return cl.StartRPCClientMode(ctx)
+			return cl.StartHTTPClientMode(ctx)
 
 		},
 	}

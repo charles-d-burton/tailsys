@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
-	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/services"
 	"github.com/google/uuid"
@@ -35,18 +35,24 @@ func (cl *Client) StartDatabase(ctx context.Context) error {
 	return cl.StartDB(cl.ConfigDir)
 }
 
-func (cl *Client) StartRPCClientMode(ctx context.Context) error {
-	fmt.Println("starting grpc client server")
+func (cl *Client) StartHTTPClientMode(ctx context.Context) error {
+	fmt.Println("starting http client server")
 	if cl.DB == nil {
 		return errors.New("datastore not initialized")
 	}
 
-	pb.RegisterPingerServer(cl.GRPCServer, &services.Pinger{
+	mux := http.NewServeMux()
+
+	pinger := &services.Pinger{
 		DB: cl.DB,
 		ID: cl.ID,
-	})
+	}
+	mux.HandleFunc("POST /ping", pinger.Ping)
 
-	pb.RegisterCommandRunnerServer(cl.GRPCServer, &CommandServer{})
+	commandServer := &CommandServer{}
+	mux.HandleFunc("POST /command", commandServer.Command)
 
-	return cl.GRPCServer.Serve(cl.Listener)
+	cl.HTTPServer.Handler = mux
+
+	return cl.HTTPServer.Serve(cl.Listener)
 }

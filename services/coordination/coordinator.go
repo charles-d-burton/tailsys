@@ -1,18 +1,19 @@
 package coordination
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
-	pb "github.com/charles-d-burton/tailsys/commands"
 	"github.com/charles-d-burton/tailsys/connections"
 	"github.com/charles-d-burton/tailsys/data/queries"
+	"github.com/charles-d-burton/tailsys/models"
 	"github.com/charles-d-burton/tailsys/services"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"gopkg.in/yaml.v3"
 )
 
 // Coordinator holds the runtime variables for the coordination server
@@ -52,29 +53,38 @@ func (co *Coordinator) StartDatabase(ctx context.Context) error {
 	return co.StartDB(co.ConfigDir)
 }
 
-// StartRPCCoordinationServer Register the gRPC server endpoints and start the server
-func (co *Coordinator) StartRPCCoordinationServer(ctx context.Context) error {
+// StartHTTPCoordinationServer Register the HTTP server endpoints and start the server
+func (co *Coordinator) StartHTTPCoordinationServer(ctx context.Context) error {
 	if co.DB == nil {
 		return errors.New("datastore not initialized")
 	}
-	pb.RegisterPingerServer(co.GRPCServer, &services.Pinger{})
-	pb.RegisterRegistrationServer(co.GRPCServer, &RegistrationServer{
+
+	mux := http.NewServeMux()
+
+	pinger := &services.Pinger{DB: co.DB, ID: co.ID}
+	mux.HandleFunc("POST /ping", pinger.Ping)
+
+	regServer := &RegistrationServer{
 		DevMode:  co.devMode,
 		DB:       co.DB,
 		Hostname: co.Hostname,
-		//TODO: This is randomized on startup, we should persist and load
-		ID: co.ID,
-	})
+		ID:       co.ID,
+	}
+	mux.HandleFunc("POST /register", regServer.Register)
 
-	pb.RegisterCommandManagerServer(co.GRPCServer, &CommanderServer{
+	commanderServer := &CommanderServer{
 		DB: co.DB,
 		CO: co,
 		ID: co.ID,
-	})
+	}
+	mux.HandleFunc("GET /nodes", commanderServer.GetNodes)
+	mux.HandleFunc("POST /nodes/command", commanderServer.SendCommandToNodes)
 
-	fmt.Println("rpc server starting to serve traffic")
+	co.HTTPServer.Handler = mux
+
+	fmt.Println("http server starting to serve traffic")
 	co.StartPingService(ctx)
-	return co.GRPCServer.Serve(co.Listener)
+	return co.HTTPServer.Serve(co.Listener)
 }
 
 func (co *Coordinator) StartPingService(ctx context.Context) {
@@ -112,51 +122,75 @@ func (co *Coordinator) pingNodes(ctx context.Context, limit uint16) {
 func (co *Coordinator) ping(ctx context.Context, sem chan struct{}, hostRow *queries.RegisteredHostsData) {
 	defer func() { <-sem }() //make space in sem
 
-	var node pb.NodeRegistrationRequest
-	err := proto.Unmarshal(hostRow.Data, &node)
+	var node models.NodeRegistrationRequest
+	err := yaml.Unmarshal(hostRow.Data, &node)
 	if err != nil {
-		fmt.Println(fmt.Errorf("error parsing host proto: %w\n", err))
+		fmt.Println(fmt.Errorf("error parsing host yaml: %w\n", err))
 		return
 	}
 
-	lastSeen := time.Now().Sub(node.Info.LastSeen.AsTime())
+	lastSeen := time.Since(node.Info.LastSeen)
 	if lastSeen.Minutes() > 10 {
 		fmt.Printf("node %s has not been seen in more than ten minutes, not pinging\n", hostRow.Hostname)
 		return
 	}
 	fmt.Println("pinging node")
-	fmt.Println(node.GetInfo().Ip)
+	fmt.Println(node.Info.IP)
 	host := hostRow.Hostname
 	ctxTo, cancel := context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
-	conn, err := co.DialContext(ctxTo, host+":"+node.Info.Port, &connections.TLSConfig{TLSKey: node.Tlskey, TLSCert: node.Tlscert})
-	//TODO: Probably need to set the tailnet fqdn at some point
-	defer conn.Close()
 
+	client, err := co.HTTPClient(&connections.TLSConfig{TLSKey: node.TLSKey, TLSCert: node.TLSCert})
 	if err != nil {
-		fmt.Println(fmt.Errorf("error parsing host proto: %w\n", err))
+		fmt.Println(fmt.Errorf("unable to create http client: %w\n", err))
 		return
 	}
 
-	p := pb.NewPingerClient(conn)
-	r, err := p.Ping(ctx, &pb.PingRequest{
-		Ping: timestamppb.Now(),
-	})
+	pingReq := models.PingRequest{
+		Ping: time.Now(),
+	}
+	data, err := yaml.Marshal(pingReq)
+	if err != nil {
+		fmt.Println(fmt.Errorf("unable to marshal ping request: %w\n", err))
+		return
+	}
+
+	url := fmt.Sprintf("https://%s:%s/ping", host, node.Info.Port)
+	hreq, err := http.NewRequestWithContext(ctxTo, "POST", url, bytes.NewReader(data))
+	if err != nil {
+		fmt.Println(fmt.Errorf("unable to create http request: %w\n", err))
+		return
+	}
+	hreq.Header.Set("Content-Type", "application/x-yaml")
+
+	resp, err := client.Do(hreq)
 	if err != nil {
 		fmt.Println(fmt.Errorf("unable to ping host %s with error: %w", host, err))
 		return
 	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println(fmt.Errorf("non-200 response from host %s: %d", host, resp.StatusCode))
+		return
+	}
+
+	var r models.PongResponse
+	if err := yaml.NewDecoder(resp.Body).Decode(&r); err != nil {
+		fmt.Println(fmt.Errorf("unable to decode ping response: %w", err))
+		return
+	}
 
 	fmt.Println("latency: ", r.InboundLatency)
-	node.Info.LastSeen = timestamppb.Now()
-	data, err := proto.Marshal(&node)
+	node.Info.LastSeen = time.Now()
+	data, err = yaml.Marshal(&node)
 	if err != nil {
-		fmt.Println("unable to marshal registration proto")
+		fmt.Println("unable to marshal registration yaml")
 	}
 
 	err = queries.UpdateRegisteredHost(co.DB, &queries.RegisteredHostsData{
 		Hostname: host,
-		Key:      node.GetKey().Key,
+		Key:      node.Key.Key,
 		Data:     data,
 	})
 
